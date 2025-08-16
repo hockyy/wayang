@@ -15,6 +15,7 @@ interface CanvasRendererProps {
   mousePosition?: Point;
   isDragging?: boolean;
   isResizing?: boolean;
+  activeHandle?: number | null;
 }
 
 export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
@@ -28,6 +29,7 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
   mousePosition,
   isDragging = false,
   isResizing = false,
+  activeHandle = null,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -64,7 +66,8 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
     isSelected: isSelectedLayerPresent,
     mousePosition,
     isDragging,
-    isResizing
+    isResizing,
+    activeHandle
   });
 
   const drawLayer = useCallback((ctx: CanvasRenderingContext2D, layer: Layer) => {

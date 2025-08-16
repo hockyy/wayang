@@ -7,6 +7,7 @@ export interface UseResizeHandlesProps {
   mousePosition?: Point;
   isDragging?: boolean;
   isResizing?: boolean;
+  activeHandle?: number | null;
 }
 
 export interface ResizeHandle {
@@ -27,7 +28,8 @@ export const useResizeHandles = ({
   isSelected, 
   mousePosition, 
   isDragging = false, 
-  isResizing = false 
+  isResizing = false,
+  activeHandle = null
 }: UseResizeHandlesProps): UseResizeHandlesReturn => {
   // Calculate handle positions
   const handles = useCallback((): ResizeHandle[] => {
@@ -87,7 +89,7 @@ export const useResizeHandles = ({
     handleList.forEach(handle => {
       // Use different colors for hovered/active handles
       const isHovered = hoveredHandle === handle.index;
-      const isActive = isResizing && hoveredHandle === handle.index;
+      const isActive = isResizing && activeHandle === handle.index;
       
       if (isActive) {
         ctx.fillStyle = '#dc3545'; // Red for active resize
@@ -104,7 +106,7 @@ export const useResizeHandles = ({
       ctx.fillRect(handle.x, handle.y, handleSize, handleSize);
       ctx.strokeRect(handle.x, handle.y, handleSize, handleSize);
     });
-  }, [handles, isSelected, mousePosition, isDragging, isResizing, getHandleAt]);
+  }, [handles, isSelected, mousePosition, isDragging, isResizing, activeHandle, getHandleAt]);
 
 
 

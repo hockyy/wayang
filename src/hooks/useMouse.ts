@@ -1,6 +1,76 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Point, MouseMode, Layer } from '@/types/core';
 
+// Utility functions for handle calculations
+const getOppositeHandle = (handleIndex: number): number => {
+  return (handleIndex + 2) % 4;
+};
+
+const getHandlePositions = (bottomLeft: Point, topRight: Point) => {
+  const x = Math.min(bottomLeft.x, topRight.x);
+  const y = Math.min(bottomLeft.y, topRight.y);
+  const width = Math.abs(topRight.x - bottomLeft.x);
+  const height = Math.abs(topRight.y - bottomLeft.y);
+  
+  return [
+    new Point(x, y),                    // 0: topLeft
+    new Point(x + width, y),            // 1: topRight  
+    new Point(x + width, y + height),   // 2: bottomRight
+    new Point(x, y + height),           // 3: bottomLeft
+  ];
+};
+
+const calculateNewBounds = (mousePos: Point, pivotPoint: Point, activeHandle: number): { bottomLeft: Point; topRight: Point } => {
+  // Calculate bounds ensuring bottomLeft is actually bottom-left and topRight is actually top-right
+  let x1: number, y1: number, x2: number, y2: number;
+  
+  switch (activeHandle) {
+    case 0: // topLeft - pivot is bottomRight (2)
+      x1 = mousePos.x;  // new left
+      y1 = mousePos.y;  // new top  
+      x2 = pivotPoint.x; // pivot right
+      y2 = pivotPoint.y; // pivot bottom
+      break;
+    case 1: // topRight - pivot is bottomLeft (3)
+      x1 = pivotPoint.x; // pivot left
+      y1 = mousePos.y;   // new top
+      x2 = mousePos.x;   // new right  
+      y2 = pivotPoint.y; // pivot bottom
+      break;
+    case 2: // bottomRight - pivot is topLeft (0)
+      x1 = pivotPoint.x; // pivot left
+      y1 = pivotPoint.y; // pivot top
+      x2 = mousePos.x;   // new right
+      y2 = mousePos.y;   // new bottom
+      break;
+    case 3: // bottomLeft - pivot is topRight (1)
+      x1 = mousePos.x;   // new left
+      y1 = pivotPoint.y; // pivot top
+      x2 = pivotPoint.x; // pivot right
+      y2 = mousePos.y;   // new bottom
+      break;
+    default:
+      // Fallback to min/max approach
+      const minX = Math.min(mousePos.x, pivotPoint.x);
+      const maxX = Math.max(mousePos.x, pivotPoint.x);
+      const minY = Math.min(mousePos.y, pivotPoint.y);
+      const maxY = Math.max(mousePos.y, pivotPoint.y);
+      x1 = minX; y1 = minY; x2 = maxX; y2 = maxY;
+  }
+  
+  // Ensure we have proper min/max values and create bottomLeft/topRight correctly
+  const minX = Math.min(x1, x2);
+  const maxX = Math.max(x1, x2);
+  const minY = Math.min(y1, y2);
+  const maxY = Math.max(y1, y2);
+  
+  // bottomLeft = bottom-left corner, topRight = top-right corner
+  const newBottomLeft = new Point(minX, maxY);
+  const newTopRight = new Point(maxX, minY);
+  
+  return { bottomLeft: newBottomLeft, topRight: newTopRight };
+};
+
 export interface UseMouseProps {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   onLayerMove?: (layerId: string, newBottomLeft: Point, newTopRight: Point) => void;
@@ -117,31 +187,20 @@ export const useMouse = ({
     if (isResizing && selectedLayer && activeHandle !== null && initialLayerBounds.current) {
       const isShiftPressed = event.shiftKey;
 
-      // Get pivot handle (opposite corner)
-      const pivotHandle = activeHandle ^ 2; // XOR with 2 to get opposite corner
+      // Get opposite handle and handle positions using utility functions
+      const pivotHandleIndex = getOppositeHandle(activeHandle);
+      const initialHandlePositions = getHandlePositions(
+        initialLayerBounds.current.bottomLeft, 
+        initialLayerBounds.current.topRight
+      );
 
-      // Get handle positions from current layer bounds
-      const handles = selectedLayer.getResizeHandles();
-      const handlePositions = [
-        handles.topLeft,     // 0
-        handles.topRight,    // 1
-        handles.bottomRight, // 2
-        handles.bottomLeft,  // 3
-      ];
+      // Pivot point is the opposite corner from initial bounds
+      const pivotPoint = initialHandlePositions[pivotHandleIndex];
 
-      // Pivot point is the opposite corner
-      const pivotPoint = handlePositions[pivotHandle];
+      // Calculate new bounds based on the specific handle being dragged
+      const { bottomLeft, topRight } = calculateNewBounds(mousePos, pivotPoint, activeHandle);
 
-      // Determine new bounds based on mouse position and pivot
-      const minX = Math.min(mousePos.x, pivotPoint.x);
-      const maxX = Math.max(mousePos.x, pivotPoint.x);
-      const minY = Math.min(mousePos.y, pivotPoint.y);
-      const maxY = Math.max(mousePos.y, pivotPoint.y);
-
-      const newBottomLeft = new Point(minX, maxY);
-      const newTopRight = new Point(maxX, minY);
-
-      onLayerResize?.(selectedLayer.id, newBottomLeft, newTopRight, isShiftPressed);
+      onLayerResize?.(selectedLayer.id, bottomLeft, topRight, isShiftPressed);
     } else if (isDragging && selectedLayer && mouseMode === 'move') {
       if (dragStartPos.current && initialDragLayerBounds.current) {
         // Calculate offset from drag start

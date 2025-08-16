@@ -64,6 +64,7 @@ export default function DalangPage() {
     isDragging,
     isResizing,
     mousePosition,
+    activeHandle,
   } = useMouse({
     canvasRef,
     onLayerMove: handleLayerMove,
@@ -215,6 +216,7 @@ export default function DalangPage() {
                 mousePosition={mousePosition}
                 isDragging={isDragging}
                 isResizing={isResizing}
+                activeHandle={activeHandle}
                 onCanvasRef={(ref) => {
                   if (canvasRef.current !== ref) {
                     (canvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = ref;
