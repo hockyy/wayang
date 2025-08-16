@@ -12,6 +12,9 @@ interface CanvasRendererProps {
   zoomLevel?: number;
   maxWidth?: number;
   maxHeight?: number;
+  mousePosition?: Point;
+  isDragging?: boolean;
+  isResizing?: boolean;
 }
 
 export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
@@ -22,6 +25,9 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
   zoomLevel = 100,
   maxWidth = 1200,
   maxHeight = 800,
+  mousePosition,
+  isDragging = false,
+  isResizing = false,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -55,7 +61,10 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
   const isSelectedLayerPresent = !!selectedLayer;
   const { drawHandles } = useResizeHandles({ 
     layer: selectedLayer || new Layer(new Point(0, 0), new Point(0, 0), 0, 0, 0), 
-    isSelected: isSelectedLayerPresent 
+    isSelected: isSelectedLayerPresent,
+    mousePosition,
+    isDragging,
+    isResizing
   });
 
   const drawLayer = useCallback((ctx: CanvasRenderingContext2D, layer: Layer) => {

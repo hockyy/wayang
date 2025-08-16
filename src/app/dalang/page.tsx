@@ -27,18 +27,17 @@ export default function DalangPage() {
     setActiveCanvas,
     addLayerToCanvas,
     removeLayerFromCanvas,
-    moveLayer,
     resizeLayer,
     getTopLayerAt,
   } = useCanvas();
 
   // No default canvas creation - let users start with empty state
 
-  const handleLayerMove = useCallback((layerId: string, offsetX: number, offsetY: number) => {
+  const handleLayerMove = useCallback((layerId: string, newBottomLeft: Point, newTopRight: Point) => {
     if (activeCanvasId) {
-      moveLayer(activeCanvasId, layerId, offsetX, offsetY);
+      resizeLayer(activeCanvasId, layerId, newBottomLeft, newTopRight, false);
     }
-  }, [activeCanvasId, moveLayer]);
+  }, [activeCanvasId, resizeLayer]);
 
   const handleLayerResize = useCallback((layerId: string, newBottomLeft: Point, newTopRight: Point, maintainAspectRatio: boolean) => {
     if (activeCanvasId) {
@@ -64,6 +63,7 @@ export default function DalangPage() {
     setSelectedLayer,
     isDragging,
     isResizing,
+    mousePosition,
   } = useMouse({
     canvasRef,
     onLayerMove: handleLayerMove,
@@ -212,6 +212,9 @@ export default function DalangPage() {
                 zoomLevel={zoomLevel}
                 maxWidth={1200}
                 maxHeight={600}
+                mousePosition={mousePosition}
+                isDragging={isDragging}
+                isResizing={isResizing}
                 onCanvasRef={(ref) => {
                   if (canvasRef.current !== ref) {
                     (canvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = ref;

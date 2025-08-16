@@ -76,7 +76,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                     {getLayerType(layer)} • Order: {layer.layerOrder}
                   </div>
                   <div className="text-xs text-gray-400">
-                    Size: {layer.getWidth()}×{layer.getHeight()}
+                    Size: {layer.getWidth().toFixed(1)}×{layer.getHeight().toFixed(1)}
                   </div>
                 </div>
                 <button

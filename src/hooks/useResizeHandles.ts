@@ -4,6 +4,9 @@ import { Layer, Point } from '@/types/core';
 export interface UseResizeHandlesProps {
   layer: Layer;
   isSelected: boolean;
+  mousePosition?: Point;
+  isDragging?: boolean;
+  isResizing?: boolean;
 }
 
 export interface ResizeHandle {
@@ -19,7 +22,13 @@ export interface UseResizeHandlesReturn {
   getPivotHandle: (activeHandle: number) => number;
 }
 
-export const useResizeHandles = ({ layer, isSelected }: UseResizeHandlesProps): UseResizeHandlesReturn => {
+export const useResizeHandles = ({ 
+  layer, 
+  isSelected, 
+  mousePosition, 
+  isDragging = false, 
+  isResizing = false 
+}: UseResizeHandlesProps): UseResizeHandlesReturn => {
   // Calculate handle positions
   const handles = useCallback((): ResizeHandle[] => {
     if (!isSelected) return [];
@@ -41,25 +50,7 @@ export const useResizeHandles = ({ layer, isSelected }: UseResizeHandlesProps): 
     ];
   }, [layer, isSelected]);
 
-  // Draw resize handles
-  const drawHandles = useCallback((ctx: CanvasRenderingContext2D) => {
-    if (!isSelected) return;
-    
-    const handleList = handles();
-    const handleSize = 8;
-    
-    // Draw handles
-    ctx.fillStyle = '#007bff';
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
-    
-    handleList.forEach(handle => {
-      ctx.fillRect(handle.x, handle.y, handleSize, handleSize);
-      ctx.strokeRect(handle.x, handle.y, handleSize, handleSize);
-    });
-  }, [handles, isSelected]);
-
-  // Check if a point is near a resize handle
+  // Check if a point is near a resize handle (define first to avoid circular dependency)
   const getHandleAt = useCallback((point: Point, tolerance: number = 8): number | null => {
     if (!isSelected) return null;
     
@@ -79,6 +70,43 @@ export const useResizeHandles = ({ layer, isSelected }: UseResizeHandlesProps): 
     
     return null;
   }, [handles, isSelected]);
+
+  // Draw resize handles
+  const drawHandles = useCallback((ctx: CanvasRenderingContext2D) => {
+    if (!isSelected) return;
+    
+    const handleList = handles();
+    const handleSize = 8;
+    
+    // Determine which handle is currently being hovered or active
+    let hoveredHandle: number | null = null;
+    if (mousePosition && !isDragging && !isResizing) {
+      hoveredHandle = getHandleAt(mousePosition);
+    }
+    
+    handleList.forEach(handle => {
+      // Use different colors for hovered/active handles
+      const isHovered = hoveredHandle === handle.index;
+      const isActive = isResizing && hoveredHandle === handle.index;
+      
+      if (isActive) {
+        ctx.fillStyle = '#dc3545'; // Red for active resize
+        ctx.strokeStyle = '#ffffff';
+      } else if (isHovered) {
+        ctx.fillStyle = '#28a745'; // Green for hover
+        ctx.strokeStyle = '#ffffff';
+      } else {
+        ctx.fillStyle = '#007bff'; // Blue for normal
+        ctx.strokeStyle = '#ffffff';
+      }
+      
+      ctx.lineWidth = 1;
+      ctx.fillRect(handle.x, handle.y, handleSize, handleSize);
+      ctx.strokeRect(handle.x, handle.y, handleSize, handleSize);
+    });
+  }, [handles, isSelected, mousePosition, isDragging, isResizing, getHandleAt]);
+
+
 
   // Get pivot handle for the given active handle
   // Handle 0 pivots around handle 2, handle 1 around handle 3, etc.
