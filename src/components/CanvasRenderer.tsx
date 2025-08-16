@@ -32,6 +32,32 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
   activeHandle = null,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  // Image cache to avoid creating new Image objects on every render
+  const imageCache = useRef<Map<string, HTMLImageElement>>(new Map());
+  
+  // Function to get or create cached image
+  const getCachedImage = useCallback((srcPath: string): Promise<HTMLImageElement> => {
+    return new Promise((resolve, reject) => {
+      // Check if image is already cached
+      const cachedImage = imageCache.current.get(srcPath);
+      if (cachedImage && cachedImage.complete) {
+        resolve(cachedImage);
+        return;
+      }
+      
+      // Create new image and cache it
+      const img = new Image();
+      img.onload = () => {
+        imageCache.current.set(srcPath, img);
+        resolve(img);
+      };
+      img.onerror = () => {
+        reject(new Error(`Failed to load image: ${srcPath}`));
+      };
+      img.src = srcPath;
+    });
+  }, []);
 
   const onCanvasRefCallback = useCallback((ref: HTMLCanvasElement | null) => {
     onCanvasRef?.(ref);
@@ -70,12 +96,14 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
     activeHandle
   });
 
-  const drawLayer = useCallback((ctx: CanvasRenderingContext2D, layer: Layer) => {
+  const drawLayer = useCallback(async (ctx: CanvasRenderingContext2D, layer: Layer) => {
     const isSelected = selectedLayer && selectedLayer.id === layer.id;
     
     if (layer instanceof ImageLayer) {
-      const img = new Image();
-      img.onload = () => {
+      try {
+        // Get cached image (this is now synchronous for cached images)
+        const img = await getCachedImage(layer.srcPath);
+        
         const x = Math.min(layer.bottomLeft.x, layer.topRight.x);
         const y = Math.min(layer.bottomLeft.y, layer.topRight.y);
         const width = layer.getWidth();
@@ -96,12 +124,30 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
             drawHandles(ctx);
           }
         }
-      };
-      img.src = layer.srcPath;
+      } catch (error) {
+        console.error('Failed to draw layer:', error);
+        // Draw placeholder rectangle for failed images
+        const x = Math.min(layer.bottomLeft.x, layer.topRight.x);
+        const y = Math.min(layer.bottomLeft.y, layer.topRight.y);
+        const width = layer.getWidth();
+        const height = layer.getHeight();
+        
+        ctx.fillStyle = '#f0f0f0';
+        ctx.fillRect(x, y, width, height);
+        ctx.strokeStyle = '#ccc';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, width, height);
+        
+        // Draw error text
+        ctx.fillStyle = '#666';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Image failed to load', x + width / 2, y + height / 2);
+      }
     }
-  }, [selectedLayer, drawHandles]);
+  }, [selectedLayer, drawHandles, getCachedImage]);
 
-  const render = useCallback(() => {
+  const render = useCallback(async () => {
     const canvasElement = canvasRef.current;
     if (!canvasElement) return;
     
@@ -113,28 +159,27 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
 
     // Draw background
     if (canvas.bg.type === 'image' && canvas.bg.imageSrc) {
-      const bgImg = new Image();
-      bgImg.onload = () => {
-        // Draw the background image to fill the entire canvas
+      try {
+        // Use cached image for background too
+        const bgImg = await getCachedImage(canvas.bg.imageSrc);
         ctx.drawImage(bgImg, 0, 0, canvasElement.width, canvasElement.height);
-        
-        // Draw layers on top of background
-        canvas.layers.forEach(layer => {
-          drawLayer(ctx, layer);
-        });
-      };
-      bgImg.src = canvas.bg.imageSrc;
+      } catch (error) {
+        console.error('Failed to load background image:', error);
+        // Fallback to white background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+      }
     } else {
       // Draw solid color background
       ctx.fillStyle = canvas.bg.color || '#ffffff';
       ctx.fillRect(0, 0, canvasElement.width, canvasElement.height);
-      
-      // Draw layers in order
-      canvas.layers.forEach(layer => {
-        drawLayer(ctx, layer);
-      });
     }
-  }, [canvas, drawLayer]);
+    
+    // Draw layers sequentially to maintain order
+    for (const layer of canvas.layers) {
+      await drawLayer(ctx, layer);
+    }
+  }, [canvas, drawLayer, getCachedImage]);
 
   useEffect(() => {
     render();
