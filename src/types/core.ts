@@ -253,6 +253,7 @@ export class Canvas {
         return this.layers[i];
       }
     }
+    console.log('No layer found at point:', point);
     return null;
   }
 }

@@ -208,11 +208,23 @@ export const useMouse = ({
   }, [updateCanvasTransform]);
 
   const getMousePositionFromEvent = useCallback((event: MouseEvent): Point | null => {
+    // Fallback calculation if canvas transform isn't ready
     if (!canvasTransform.isValid || !canvasTransform.rect) {
-      return null;
+      if (!canvasRef.current) return null;
+      
+      // Calculate using getBoundingClientRect as fallback
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+      
+      // Convert from display coordinates to canvas coordinates
+      const scaleX = canvasRef.current.width / rect.width;
+      const scaleY = canvasRef.current.height / rect.height;
+      
+      return new Point(mouseX * scaleX, mouseY * scaleY);
     }
 
-    // Calculate the mouse position relative to the canvas element
+    // Use cached transform for better performance
     const mouseX = event.clientX - canvasTransform.rect.left;
     const mouseY = event.clientY - canvasTransform.rect.top;
 
@@ -220,11 +232,11 @@ export const useMouse = ({
     const canvasX = mouseX * canvasTransform.scaleX;
     const canvasY = mouseY * canvasTransform.scaleY;
     return new Point(canvasX, canvasY);
-  }, [canvasTransform]);
+  }, [canvasTransform, canvasRef]);
 
   const handleMouseDown = useCallback((event: MouseEvent) => {
     if (!canvasRef.current) return;
-
+    
     const mousePos = getMousePositionFromEvent(event);
     if (!mousePos) return;
     
