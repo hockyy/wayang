@@ -8,7 +8,7 @@ import { CanvasRenderer } from '@/components/CanvasRenderer';
 import { ToolPanel } from '@/components/ToolPanel';
 import { LayerPanel } from '@/components/LayerPanel';
 import { CanvasPanel } from '@/components/CanvasPanel';
-import { Point, ImageLayer } from '@/types/core';
+import { Point, ImageLayer, Layer } from '@/types/core';
 
 export default function DalangPage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -27,23 +27,12 @@ export default function DalangPage() {
     setActiveCanvas,
     addLayerToCanvas,
     removeLayerFromCanvas,
-    resizeLayer,
     getTopLayerAt,
   } = useCanvas();
 
   // No default canvas creation - let users start with empty state
 
-  const handleLayerMove = useCallback((layerId: string, newBottomLeft: Point, newTopRight: Point) => {
-    if (activeCanvasId) {
-      resizeLayer(activeCanvasId, layerId, newBottomLeft, newTopRight, false);
-    }
-  }, [activeCanvasId, resizeLayer]);
 
-  const handleLayerResize = useCallback((layerId: string, newBottomLeft: Point, newTopRight: Point, maintainAspectRatio: boolean) => {
-    if (activeCanvasId) {
-      resizeLayer(activeCanvasId, layerId, newBottomLeft, newTopRight, maintainAspectRatio);
-    }
-  }, [activeCanvasId, resizeLayer]);
 
   const handleGetTopLayerAt = useCallback((point: Point) => {
     if (activeCanvasId) {
@@ -52,8 +41,10 @@ export default function DalangPage() {
     return null;
   }, [activeCanvasId, getTopLayerAt]);
 
-  const handleLayerSelect = useCallback(() => {
-    // This will be used by the mouse hook
+  const handleLayerSelect = useCallback((layer: Layer | null) => {
+    // This callback is used by the mouse hook for layer selection
+    // The actual selectedLayer state is managed by useMouse
+    console.log('Layer selected:', layer?.id || 'none');
   }, []);
 
   const {
@@ -67,8 +58,6 @@ export default function DalangPage() {
     activeHandle,
   } = useMouse({
     canvasRef,
-    onLayerMove: handleLayerMove,
-    onLayerResize: handleLayerResize,
     onLayerSelect: handleLayerSelect,
     getTopLayerAt: handleGetTopLayerAt,
     mode: 'move',
@@ -83,6 +72,16 @@ export default function DalangPage() {
   const { uploadImage, isUploading, uploadError } = useImageUpload({
     onImageAdded: handleImageAdded,
   });
+
+  // Sync selectedLayer with the updated layer from canvas state
+  React.useEffect(() => {
+    if (selectedLayer && activeCanvasLayers) {
+      const updatedLayer = activeCanvasLayers.find(layer => layer.id === selectedLayer.id);
+      if (updatedLayer && updatedLayer !== selectedLayer) {
+        setSelectedLayer(updatedLayer);
+      }
+    }
+  }, [activeCanvasLayers, selectedLayer, setSelectedLayer]);
 
   const handleLayerDelete = useCallback((layerId: string) => {
     if (activeCanvasId) {

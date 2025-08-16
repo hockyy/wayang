@@ -190,18 +190,20 @@ export const useCanvas = ({}: UseCanvasProps = {}): UseCanvasReturn => {
   const resizeLayer = useCallback((canvasId: string, layerId: string, newBottomLeft: Point, newTopRight: Point, maintainAspectRatio: boolean) => {
     setCanvases(prev => prev.map(canvas => {
       if (canvas.id === canvasId) {
-        // Create a completely new canvas object with resized layer
-        const updatedCanvas = new Canvas(canvas.width, canvas.height, canvas.bg);
-        updatedCanvas.id = canvas.id; // Keep the same ID
-        updatedCanvas.layers = canvas.layers.map((layer: Layer) => {
+        // Create a new canvas with updated layer - but reuse layer objects when possible
+        const updatedLayers = canvas.layers.map((layer: Layer) => {
           if (layer.id === layerId) {
             // Create a new layer object with resized dimensions
             const resizedLayer = Object.assign(Object.create(Object.getPrototypeOf(layer)), layer);
             resizedLayer.resize(newBottomLeft, newTopRight, maintainAspectRatio);
             return resizedLayer;
           }
-          return layer;
+          return layer; // Reuse existing layer objects
         });
+        
+        // Create new canvas but reuse properties to minimize object creation
+        const updatedCanvas = Object.assign(Object.create(Object.getPrototypeOf(canvas)), canvas);
+        updatedCanvas.layers = updatedLayers;
         return updatedCanvas;
       }
       return canvas;

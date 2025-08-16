@@ -1,10 +1,11 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Layer, Point } from '@/types/core';
+import { HANDLE_SIZE, HANDLE_OFFSET } from '@/constants/ui';
 
 export interface UseResizeHandlesProps {
   layer: Layer;
   isSelected: boolean;
-  mousePosition?: Point;
+  mousePosition?: Point | null;
   isDragging?: boolean;
   isResizing?: boolean;
   activeHandle?: number | null;
@@ -23,42 +24,41 @@ export interface UseResizeHandlesReturn {
   getPivotHandle: (activeHandle: number) => number;
 }
 
-export const useResizeHandles = ({ 
-  layer, 
-  isSelected, 
-  mousePosition, 
-  isDragging = false, 
+export const useResizeHandles = ({
+  layer,
+  isSelected,
+  mousePosition,
+  isDragging = false,
   isResizing = false,
   activeHandle = null
 }: UseResizeHandlesProps): UseResizeHandlesReturn => {
-  // Calculate handle positions
-  const handles = useCallback((): ResizeHandle[] => {
+  // Calculate handle positions using useMemo to ensure re-computation when bounds change
+  // Include specific layer properties that affect handle positions in dependencies
+  const handles = useMemo((): ResizeHandle[] => {
     if (!isSelected) return [];
-    
+
     const x = Math.min(layer.bottomLeft.x, layer.topRight.x);
     const y = Math.min(layer.bottomLeft.y, layer.topRight.y);
     const width = layer.getWidth();
     const height = layer.getHeight();
-    
-    const handleSize = 8;
-    const handleOffset = handleSize / 2;
-    
+    console.log(x, y, width, height);
     // Handle indices: 0=topLeft, 1=topRight, 2=bottomRight, 3=bottomLeft
     return [
-      { x: x - handleOffset, y: y - handleOffset, index: 0 }, // top-left
-      { x: x + width - handleOffset, y: y - handleOffset, index: 1 }, // top-right
-      { x: x + width - handleOffset, y: y + height - handleOffset, index: 2 }, // bottom-right
-      { x: x - handleOffset, y: y + height - handleOffset, index: 3 }, // bottom-left
+      { x: x - HANDLE_OFFSET, y: y - HANDLE_OFFSET, index: 0 }, // top-left
+      { x: x + width - HANDLE_OFFSET, y: y - HANDLE_OFFSET, index: 1 }, // top-right
+      { x: x + width - HANDLE_OFFSET, y: y + height - HANDLE_OFFSET, index: 2 }, // bottom-right
+      { x: x - HANDLE_OFFSET, y: y + height - HANDLE_OFFSET, index: 3 }, // bottom-left
     ];
-  }, [layer, isSelected]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layer, layer.bottomLeft.x, layer.bottomLeft.y, layer.topRight.x, layer.topRight.y, isSelected]);
 
   // Check if a point is near a resize handle (define first to avoid circular dependency)
-  const getHandleAt = useCallback((point: Point, tolerance: number = 8): number | null => {
+  const getHandleAt = useCallback((point: Point, tolerance: number = HANDLE_SIZE): number | null => {
     if (!isSelected) return null;
-    
-    const handleList = handles();
+
+    const handleList = handles;
     const handleSize = tolerance;
-    
+
     for (const handle of handleList) {
       if (
         point.x >= handle.x - handleSize / 2 &&
@@ -69,28 +69,27 @@ export const useResizeHandles = ({
         return handle.index;
       }
     }
-    
+
     return null;
   }, [handles, isSelected]);
 
   // Draw resize handles
   const drawHandles = useCallback((ctx: CanvasRenderingContext2D) => {
     if (!isSelected) return;
-    
-    const handleList = handles();
-    const handleSize = 8;
-    
+
+    const handleList = handles;
+
     // Determine which handle is currently being hovered or active
     let hoveredHandle: number | null = null;
     if (mousePosition && !isDragging && !isResizing) {
       hoveredHandle = getHandleAt(mousePosition);
     }
-    
+
     handleList.forEach(handle => {
       // Use different colors for hovered/active handles
       const isHovered = hoveredHandle === handle.index;
       const isActive = isResizing && activeHandle === handle.index;
-      
+
       if (isActive) {
         ctx.fillStyle = '#dc3545'; // Red for active resize
         ctx.strokeStyle = '#ffffff';
@@ -101,10 +100,10 @@ export const useResizeHandles = ({
         ctx.fillStyle = '#007bff'; // Blue for normal
         ctx.strokeStyle = '#ffffff';
       }
-      
+
       ctx.lineWidth = 1;
-      ctx.fillRect(handle.x, handle.y, handleSize, handleSize);
-      ctx.strokeRect(handle.x, handle.y, handleSize, handleSize);
+      ctx.fillRect(handle.x, handle.y, HANDLE_SIZE, HANDLE_SIZE);
+      ctx.strokeRect(handle.x, handle.y, HANDLE_SIZE, HANDLE_SIZE);
     });
   }, [handles, isSelected, mousePosition, isDragging, isResizing, activeHandle, getHandleAt]);
 
@@ -118,7 +117,7 @@ export const useResizeHandles = ({
   }, []);
 
   return {
-    handles: handles(),
+    handles: handles,
     drawHandles,
     getHandleAt,
     getPivotHandle,

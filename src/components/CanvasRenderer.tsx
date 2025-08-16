@@ -12,7 +12,7 @@ interface CanvasRendererProps {
   zoomLevel?: number;
   maxWidth?: number;
   maxHeight?: number;
-  mousePosition?: Point;
+  mousePosition?: Point | null;
   isDragging?: boolean;
   isResizing?: boolean;
   activeHandle?: number | null;

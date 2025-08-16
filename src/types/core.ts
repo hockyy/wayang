@@ -1,3 +1,5 @@
+import { HANDLE_SIZE } from '@/constants/ui';
+
 export class Fraction {
   private denominator: number;
   private numerator: number;
@@ -167,7 +169,7 @@ export class Layer {
 
   // Check if a point is near a resize handle
   // Returns handle index: 0=topLeft, 1=topRight, 2=bottomRight, 3=bottomLeft
-  getHandleAt(point: Point, tolerance: number = 8): number | null {
+  getHandleAt(point: Point, tolerance: number = HANDLE_SIZE): number | null {
     const handles = this.getResizeHandles();
     const handleSize = tolerance;
     const handlePositions = [

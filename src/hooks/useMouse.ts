@@ -73,8 +73,6 @@ const calculateNewBounds = (mousePos: Point, pivotPoint: Point, activeHandle: nu
 
 export interface UseMouseProps {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
-  onLayerMove?: (layerId: string, newBottomLeft: Point, newTopRight: Point) => void;
-  onLayerResize?: (layerId: string, newBottomLeft: Point, newTopRight: Point, maintainAspectRatio: boolean) => void;
   onLayerSelect?: (layer: Layer | null) => void;
   getTopLayerAt?: (point: Point) => Layer | null;
   mode?: MouseMode;
@@ -87,14 +85,12 @@ export interface UseMouseReturn {
   setSelectedLayer: (layer: Layer | null) => void;
   isDragging: boolean;
   isResizing: boolean;
-  mousePosition: Point;
+  mousePosition: Point | null;
   activeHandle: number | null; // 0=topLeft, 1=topRight, 2=bottomRight, 3=bottomLeft
 }
 
 export const useMouse = ({
   canvasRef,
-  onLayerMove,
-  onLayerResize,
   onLayerSelect,
   getTopLayerAt,
   mode = 'move'
@@ -103,72 +99,126 @@ export const useMouse = ({
   const [selectedLayer, setSelectedLayer] = useState<Layer | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
-  const [mousePosition, setMousePosition] = useState<Point>(new Point(0, 0));
+  const [mousePosition, setMousePosition] = useState<Point | null>(null);
   const [activeHandle, setActiveHandle] = useState<number | null>(null);
+  const [, forceUpdate] = useState({});
 
   const dragStartPos = useRef<Point | null>(null);
   const initialLayerBounds = useRef<{ bottomLeft: Point; topRight: Point } | null>(null);
   const initialDragLayerBounds = useRef<{ bottomLeft: Point; topRight: Point } | null>(null);
 
-  const getMousePositionFromEvent = useCallback((event: MouseEvent): Point => {
-    if (!canvasRef.current) return new Point(0, 0);
+  // Track canvas dimensions and position for efficient coordinate transformation
+  const [canvasTransform, setCanvasTransform] = useState<{
+    rect: DOMRect | null;
+    scaleX: number;
+    scaleY: number;
+    isValid: boolean;
+  }>({
+    rect: null,
+    scaleX: 1,
+    scaleY: 1,
+    isValid: false
+  });
 
-    const rect = canvasRef.current.getBoundingClientRect();
+  // Update canvas transform when canvas changes or on resize
+  const updateCanvasTransform = useCallback(() => {
+    if (!canvasRef.current) {
+      setCanvasTransform({
+        rect: null,
+        scaleX: 1,
+        scaleY: 1,
+        isValid: false
+      });
+      return;
+    }
+
     const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    
+    setCanvasTransform({
+      rect,
+      scaleX: canvas.width / rect.width,
+      scaleY: canvas.height / rect.height,
+      isValid: true
+    });
+  }, [canvasRef]);
+
+  // Update transform when canvas changes or window resizes
+  useEffect(() => {
+    updateCanvasTransform();
+    
+    const handleResize = () => updateCanvasTransform();
+    window.addEventListener('resize', handleResize);
+    
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [updateCanvasTransform]);
+
+  const getMousePositionFromEvent = useCallback((event: MouseEvent): Point | null => {
+    if (!canvasTransform.isValid || !canvasTransform.rect) {
+      return null;
+    }
+
     // Calculate the mouse position relative to the canvas element
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
+    const mouseX = event.clientX - canvasTransform.rect.left;
+    const mouseY = event.clientY - canvasTransform.rect.top;
 
     // Convert from display coordinates to canvas coordinates
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-
     return new Point(
-      mouseX * scaleX,
-      mouseY * scaleY
+      mouseX * canvasTransform.scaleX,
+      mouseY * canvasTransform.scaleY
     );
-  }, [canvasRef]);
+  }, [canvasTransform]);
 
   const handleMouseDown = useCallback((event: MouseEvent) => {
     if (!canvasRef.current) return;
 
     const mousePos = getMousePositionFromEvent(event);
+    if (!mousePos) return;
+    
+    // Prevent default browser behavior (text selection, image dragging, etc.)
+    event.preventDefault();
     setMousePosition(mousePos);
 
     if (mouseMode === 'move' && getTopLayerAt) {
+      // First, check if clicking on a handle of the currently selected layer
+      if (selectedLayer) {
+        const selectedHandleIndex = selectedLayer.getHandleAt(mousePos);
+        
+        if (selectedHandleIndex !== null) {
+          // Start resizing the selected layer
+          setIsResizing(true);
+          setActiveHandle(selectedHandleIndex);
+          initialLayerBounds.current = {
+            bottomLeft: selectedLayer.bottomLeft.clone(),
+            topRight: selectedLayer.topRight.clone()
+          };
+          dragStartPos.current = mousePos;
+          return; // Early return to avoid checking other layers
+        }
+      }
+
+      // If not clicking on a handle, check for layer selection/interaction
       const layer = getTopLayerAt(mousePos);
+      console.log('Mouse click at:', mousePos, 'Found layer:', layer?.id || 'none');
 
       if (layer) {
-        // Check if clicking on a resize handle first
-        const handleIndex = layer.getHandleAt(mousePos);
-
-        if (handleIndex !== null) {
-          // Start resizing
+        if (layer.containsPoint(mousePos)) {
+          // Start moving
           setSelectedLayer(layer);
           onLayerSelect?.(layer);
-          setIsResizing(true);
-          setActiveHandle(handleIndex);
-          initialLayerBounds.current = {
+          setIsDragging(true);
+          dragStartPos.current = mousePos;
+          // Store initial layer bounds for dragging
+          initialDragLayerBounds.current = {
             bottomLeft: layer.bottomLeft.clone(),
             topRight: layer.topRight.clone()
           };
-          dragStartPos.current = mousePos;
-                  } else if (layer.containsPoint(mousePos)) {
-            // Start moving
-            setSelectedLayer(layer);
-            onLayerSelect?.(layer);
-            setIsDragging(true);
-            dragStartPos.current = mousePos;
-            // Store initial layer bounds for dragging
-            initialDragLayerBounds.current = {
-              bottomLeft: layer.bottomLeft.clone(),
-              topRight: layer.topRight.clone()
-            };
         } else {
-          // Click outside layer, deselect
-          setSelectedLayer(null);
-          onLayerSelect?.(null);
-          dragStartPos.current = null;
+          // Click on layer but outside its bounds (shouldn't happen with getTopLayerAt)
+          setSelectedLayer(layer);
+          onLayerSelect?.(layer);
         }
       } else {
         // No layer found, deselect
@@ -176,16 +226,22 @@ export const useMouse = ({
         onLayerSelect?.(null);
       }
     }
-  }, [mouseMode, getTopLayerAt, onLayerSelect, canvasRef, getMousePositionFromEvent]);
+  }, [mouseMode, getTopLayerAt, onLayerSelect, canvasRef, getMousePositionFromEvent, selectedLayer]);
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
     if (!canvasRef.current) return;
 
     const mousePos = getMousePositionFromEvent(event);
+    if (!mousePos) return;
+    
+    // Prevent default browser behavior during dragging/resizing
+    if (isDragging || isResizing) {
+      event.preventDefault();
+    }
+    
     setMousePosition(mousePos);
 
     if (isResizing && selectedLayer && activeHandle !== null && initialLayerBounds.current) {
-      const isShiftPressed = event.shiftKey;
 
       // Get opposite handle and handle positions using utility functions
       const pivotHandleIndex = getOppositeHandle(activeHandle);
@@ -200,7 +256,11 @@ export const useMouse = ({
       // Calculate new bounds based on the specific handle being dragged
       const { bottomLeft, topRight } = calculateNewBounds(mousePos, pivotPoint, activeHandle);
 
-      onLayerResize?.(selectedLayer.id, bottomLeft, topRight, isShiftPressed);
+      // Directly update the layer bounds without creating new objects
+      selectedLayer.bottomLeft.x = bottomLeft.x;
+      selectedLayer.bottomLeft.y = bottomLeft.y;
+      selectedLayer.topRight.x = topRight.x;
+      selectedLayer.topRight.y = topRight.y;
     } else if (isDragging && selectedLayer && mouseMode === 'move') {
       if (dragStartPos.current && initialDragLayerBounds.current) {
         // Calculate offset from drag start
@@ -217,21 +277,32 @@ export const useMouse = ({
           initialDragLayerBounds.current.topRight.y + offsetY
         );
         
-        // Set layer to absolute position
-        onLayerMove?.(selectedLayer.id, newBottomLeft, newTopRight);
+        // Directly update the layer position without creating new objects
+        selectedLayer.bottomLeft.x = newBottomLeft.x;
+        selectedLayer.bottomLeft.y = newBottomLeft.y;
+        selectedLayer.topRight.x = newTopRight.x;
+        selectedLayer.topRight.y = newTopRight.y;
       }
     }
 
-  }, [isDragging, isResizing, selectedLayer, activeHandle, mouseMode, onLayerMove, onLayerResize, canvasRef, getMousePositionFromEvent]);
+  }, [isDragging, isResizing, selectedLayer, activeHandle, mouseMode, canvasRef, getMousePositionFromEvent]);
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = useCallback((event: MouseEvent) => {
+    // Prevent default browser behavior
+    event.preventDefault();
+    
+    // Force a re-render to finalize any changes
+    if (isDragging || isResizing) {
+      forceUpdate({});
+    }
+    
     setIsDragging(false);
     setIsResizing(false);
     setActiveHandle(null);
     dragStartPos.current = null;
     initialLayerBounds.current = null;
     initialDragLayerBounds.current = null;
-  }, []);
+  }, [isDragging, isResizing]);
 
   // Set up event listeners
   useEffect(() => {
