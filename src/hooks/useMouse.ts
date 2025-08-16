@@ -20,42 +20,95 @@ const getHandlePositions = (bottomLeft: Point, topRight: Point) => {
   ];
 };
 
-const calculateNewBounds = (mousePos: Point, pivotPoint: Point, activeHandle: number): { bottomLeft: Point; topRight: Point } => {
+const calculateNewBounds = (mousePos: Point, pivotPoint: Point, activeHandle: number, maintainAspectRatio: boolean = false, originalAspectRatio?: number): { bottomLeft: Point; topRight: Point } => {
   // Calculate bounds ensuring bottomLeft is actually bottom-left and topRight is actually top-right
   let x1: number, y1: number, x2: number, y2: number;
   
-  switch (activeHandle) {
-    case 0: // topLeft - pivot is bottomRight (2)
-      x1 = mousePos.x;  // new left
-      y1 = mousePos.y;  // new top  
-      x2 = pivotPoint.x; // pivot right
-      y2 = pivotPoint.y; // pivot bottom
-      break;
-    case 1: // topRight - pivot is bottomLeft (3)
-      x1 = pivotPoint.x; // pivot left
-      y1 = mousePos.y;   // new top
-      x2 = mousePos.x;   // new right  
-      y2 = pivotPoint.y; // pivot bottom
-      break;
-    case 2: // bottomRight - pivot is topLeft (0)
-      x1 = pivotPoint.x; // pivot left
-      y1 = pivotPoint.y; // pivot top
-      x2 = mousePos.x;   // new right
-      y2 = mousePos.y;   // new bottom
-      break;
-    case 3: // bottomLeft - pivot is topRight (1)
-      x1 = mousePos.x;   // new left
-      y1 = pivotPoint.y; // pivot top
-      x2 = pivotPoint.x; // pivot right
-      y2 = mousePos.y;   // new bottom
-      break;
-    default:
-      // Fallback to min/max approach
-      const minX = Math.min(mousePos.x, pivotPoint.x);
-      const maxX = Math.max(mousePos.x, pivotPoint.x);
-      const minY = Math.min(mousePos.y, pivotPoint.y);
-      const maxY = Math.max(mousePos.y, pivotPoint.y);
-      x1 = minX; y1 = minY; x2 = maxX; y2 = maxY;
+  if (maintainAspectRatio && originalAspectRatio) {
+    // Calculate constrained mouse position to maintain aspect ratio
+    const deltaX = mousePos.x - pivotPoint.x;
+    const deltaY = mousePos.y - pivotPoint.y;
+    
+    // Calculate the size based on the larger dimension change
+    const currentWidth = Math.abs(deltaX);
+    const currentHeight = Math.abs(deltaY);
+    
+    // Determine which dimension should drive the resize
+    let constrainedWidth: number, constrainedHeight: number;
+    
+    if (currentWidth / currentHeight > originalAspectRatio) {
+      // Width is driving, constrain height
+      constrainedWidth = currentWidth;
+      constrainedHeight = currentWidth / originalAspectRatio;
+    } else {
+      // Height is driving, constrain width
+      constrainedHeight = currentHeight;
+      constrainedWidth = currentHeight * originalAspectRatio;
+    }
+    
+    // Apply the constrained dimensions with proper signs
+    const constrainedDeltaX = constrainedWidth * Math.sign(deltaX);
+    const constrainedDeltaY = constrainedHeight * Math.sign(deltaY);
+    
+    // Calculate new position based on constrained deltas
+    const constrainedMouseX = pivotPoint.x + constrainedDeltaX;
+    const constrainedMouseY = pivotPoint.y + constrainedDeltaY;
+    
+    // Use constrained position for calculations
+    switch (activeHandle) {
+      case 0: // topLeft - pivot is bottomRight (2)
+        x1 = constrainedMouseX; y1 = constrainedMouseY; x2 = pivotPoint.x; y2 = pivotPoint.y;
+        break;
+      case 1: // topRight - pivot is bottomLeft (3)
+        x1 = pivotPoint.x; y1 = constrainedMouseY; x2 = constrainedMouseX; y2 = pivotPoint.y;
+        break;
+      case 2: // bottomRight - pivot is topLeft (0)
+        x1 = pivotPoint.x; y1 = pivotPoint.y; x2 = constrainedMouseX; y2 = constrainedMouseY;
+        break;
+      case 3: // bottomLeft - pivot is topRight (1)
+        x1 = constrainedMouseX; y1 = pivotPoint.y; x2 = pivotPoint.x; y2 = constrainedMouseY;
+        break;
+      default:
+        x1 = Math.min(constrainedMouseX, pivotPoint.x);
+        y1 = Math.min(constrainedMouseY, pivotPoint.y);
+        x2 = Math.max(constrainedMouseX, pivotPoint.x);
+        y2 = Math.max(constrainedMouseY, pivotPoint.y);
+    }
+  } else {
+    // Free resize (original logic)
+    switch (activeHandle) {
+      case 0: // topLeft - pivot is bottomRight (2)
+        x1 = mousePos.x;  // new left
+        y1 = mousePos.y;  // new top  
+        x2 = pivotPoint.x; // pivot right
+        y2 = pivotPoint.y; // pivot bottom
+        break;
+      case 1: // topRight - pivot is bottomLeft (3)
+        x1 = pivotPoint.x; // pivot left
+        y1 = mousePos.y;   // new top
+        x2 = mousePos.x;   // new right  
+        y2 = pivotPoint.y; // pivot bottom
+        break;
+      case 2: // bottomRight - pivot is topLeft (0)
+        x1 = pivotPoint.x; // pivot left
+        y1 = pivotPoint.y; // pivot top
+        x2 = mousePos.x;   // new right
+        y2 = mousePos.y;   // new bottom
+        break;
+      case 3: // bottomLeft - pivot is topRight (1)
+        x1 = mousePos.x;   // new left
+        y1 = pivotPoint.y; // pivot top
+        x2 = pivotPoint.x; // pivot right
+        y2 = mousePos.y;   // new bottom
+        break;
+      default:
+        // Fallback to min/max approach
+        const minX = Math.min(mousePos.x, pivotPoint.x);
+        const maxX = Math.max(mousePos.x, pivotPoint.x);
+        const minY = Math.min(mousePos.y, pivotPoint.y);
+        const maxY = Math.max(mousePos.y, pivotPoint.y);
+        x1 = minX; y1 = minY; x2 = maxX; y2 = maxY;
+    }
   }
   
   // Ensure we have proper min/max values and create bottomLeft/topRight correctly
@@ -250,18 +303,14 @@ export const useMouse = ({
       const pivotPoint = initialHandlePositions[pivotHandleIndex];
 
       // Calculate new bounds based on the specific handle being dragged
-      const { bottomLeft, topRight } = calculateNewBounds(mousePos, pivotPoint, activeHandle);
+      const originalAspectRatio = isShiftPressed ? selectedLayer.getAspectRatio().getFloat() : undefined;
+      const { bottomLeft, topRight } = calculateNewBounds(mousePos, pivotPoint, activeHandle, isShiftPressed, originalAspectRatio);
 
-      if (isShiftPressed) {
-        // Use the Layer.resize() method to maintain aspect ratio
-        selectedLayer.resize(bottomLeft, topRight, true);
-      } else {
-        // Directly update the layer bounds without creating new objects
-        selectedLayer.bottomLeft.x = bottomLeft.x;
-        selectedLayer.bottomLeft.y = bottomLeft.y;
-        selectedLayer.topRight.x = topRight.x;
-        selectedLayer.topRight.y = topRight.y;
-      }
+      // Always use direct coordinate mutation (no Layer.resize to avoid pivot movement)
+      selectedLayer.bottomLeft.x = bottomLeft.x;
+      selectedLayer.bottomLeft.y = bottomLeft.y;
+      selectedLayer.topRight.x = topRight.x;
+      selectedLayer.topRight.y = topRight.y;
     } else if (isDragging && selectedLayer && mouseMode === 'move') {
       if (dragStartPos.current && initialDragLayerBounds.current) {
         // Calculate offset from drag start
