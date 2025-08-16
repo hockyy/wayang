@@ -104,7 +104,7 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
   const render = useCallback(() => {
     const canvasElement = canvasRef.current;
     if (!canvasElement) return;
-
+    
     const ctx = canvasElement.getContext('2d');
     if (!ctx) return;
 

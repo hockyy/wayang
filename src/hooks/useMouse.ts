@@ -73,7 +73,6 @@ const calculateNewBounds = (mousePos: Point, pivotPoint: Point, activeHandle: nu
 
 export interface UseMouseProps {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
-  onLayerSelect?: (layer: Layer | null) => void;
   getTopLayerAt?: (point: Point) => Layer | null;
   mode?: MouseMode;
 }
@@ -91,7 +90,6 @@ export interface UseMouseReturn {
 
 export const useMouse = ({
   canvasRef,
-  onLayerSelect,
   getTopLayerAt,
   mode = 'move'
 }: UseMouseProps): UseMouseReturn => {
@@ -207,7 +205,6 @@ export const useMouse = ({
         if (layer.containsPoint(mousePos)) {
           // Start moving
           setSelectedLayer(layer);
-          onLayerSelect?.(layer);
           setIsDragging(true);
           dragStartPos.current = mousePos;
           // Store initial layer bounds for dragging
@@ -218,15 +215,13 @@ export const useMouse = ({
         } else {
           // Click on layer but outside its bounds (shouldn't happen with getTopLayerAt)
           setSelectedLayer(layer);
-          onLayerSelect?.(layer);
         }
       } else {
         // No layer found, deselect
         setSelectedLayer(null);
-        onLayerSelect?.(null);
       }
     }
-  }, [mouseMode, getTopLayerAt, onLayerSelect, canvasRef, getMousePositionFromEvent, selectedLayer]);
+  }, [getTopLayerAt, getMousePositionFromEvent, selectedLayer]);
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
     if (!canvasRef.current) return;
@@ -322,8 +317,7 @@ export const useMouse = ({
 
   const handleSetSelectedLayer = useCallback((layer: Layer | null) => {
     setSelectedLayer(layer);
-    onLayerSelect?.(layer);
-  }, [onLayerSelect]);
+  }, []);
 
   return {
     mouseMode,
