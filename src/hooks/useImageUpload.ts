@@ -35,15 +35,28 @@ export const useImageUpload = ({ onImageAdded }: UseImageUploadProps = {}): UseI
       return new Promise((resolve, reject) => {
         img.onload = () => {
           try {
-            // Create ImageLayer with original dimensions
+            // Create ImageLayer with reasonable size (scale down large images)
+            const maxSize = 400; // Maximum width or height for new layers
+            let layerWidth = img.naturalWidth;
+            let layerHeight = img.naturalHeight;
+            
+            // Scale down if too large
+            if (layerWidth > maxSize || layerHeight > maxSize) {
+              const scale = Math.min(maxSize / layerWidth, maxSize / layerHeight);
+              layerWidth = layerWidth * scale;
+              layerHeight = layerHeight * scale;
+            }
+            
             const imageLayer = new ImageLayer(
               new Point(50, 50), // Default position
-              new Point(50 + img.naturalWidth, 50 + img.naturalHeight),
+              new Point(50 + layerWidth, 50 + layerHeight),
               Date.now(), // Use timestamp as layer order
-              img.naturalWidth,
+              img.naturalWidth, // Keep original dimensions for aspect ratio
               img.naturalHeight,
               objectUrl
             );
+            
+
 
             onImageAdded?.(imageLayer);
             resolve(imageLayer);
