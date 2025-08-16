@@ -7,6 +7,7 @@ import { CanvasPanel } from '@/components/CanvasPanel';
 
 export default function ViewPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isCanvasPanelCollapsed, setIsCanvasPanelCollapsed] = React.useState(false);
   
   const {
     canvases,
@@ -37,6 +38,8 @@ export default function ViewPage() {
           onCanvasSelect={setActiveCanvas}
           allowCreate={false}
           allowDelete={false}
+          isCollapsed={isCanvasPanelCollapsed}
+          onToggleCollapse={() => setIsCanvasPanelCollapsed(!isCanvasPanelCollapsed)}
         />
       </div>
     );
@@ -73,6 +76,9 @@ export default function ViewPage() {
                 canvas={activeCanvas}
                 selectedLayer={null} // No selection in view mode
                 className="shadow-lg"
+                zoomLevel={100}
+                maxWidth={1200}
+                maxHeight={600}
                 onCanvasRef={(ref) => {
                   if (canvasRef.current !== ref) {
                     (canvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = ref;

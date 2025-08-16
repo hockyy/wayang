@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Layer, ImageLayer } from '@/types/core';
 
 interface LayerPanelProps {
@@ -16,23 +16,38 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
   onLayerSelect,
   onLayerDelete,
 }) => {
-  const getLayerName = (layer: Layer): string => {
+  const getLayerName = useCallback((layer: Layer): string => {
     if (layer instanceof ImageLayer) {
       const fileName = layer.srcPath.split('/').pop() || 'Image';
       return fileName.length > 15 ? fileName.substring(0, 15) + '...' : fileName;
     }
     return `Layer ${layer.layerOrder}`;
-  };
+  }, []);
 
-  const getLayerType = (layer: Layer): string => {
+  const getLayerType = useCallback((layer: Layer): string => {
     if (layer instanceof ImageLayer) {
       return 'Image';
     }
     return 'Unknown';
-  };
+  }, []);
 
   // Sort layers by layer order (highest first for display)
-  const sortedLayers = [...layers].sort((a, b) => b.layerOrder - a.layerOrder);
+  const sortedLayers = useMemo(() => {
+    return [...layers].sort((a, b) => b.layerOrder - a.layerOrder);
+  }, [layers]);
+
+  const handleLayerClick = useCallback((layer: Layer) => {
+    onLayerSelect(layer);
+  }, [onLayerSelect]);
+
+  const handleLayerDelete = useCallback((e: React.MouseEvent, layerId: string) => {
+    e.stopPropagation();
+    onLayerDelete(layerId);
+  }, [onLayerDelete]);
+
+  const handleDeselectAll = useCallback(() => {
+    onLayerSelect(null);
+  }, [onLayerSelect]);
 
   return (
     <div className="w-64 bg-gray-100 border-l border-gray-300 p-4">
@@ -45,7 +60,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
           {sortedLayers.map((layer) => (
             <div
               key={layer.id}
-              onClick={() => onLayerSelect(layer)}
+              onClick={() => handleLayerClick(layer)}
               className={`p-3 rounded border cursor-pointer transition-colors ${
                 selectedLayer?.id === layer.id
                   ? 'bg-blue-100 border-blue-300'
@@ -65,10 +80,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
                   </div>
                 </div>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onLayerDelete(layer.id);
-                  }}
+                  onClick={(e) => handleLayerDelete(e, layer.id)}
                   className="ml-2 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
                   title="Delete layer"
                 >
@@ -97,7 +109,7 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
         <p className="text-xs text-gray-500 mb-2">Layer Controls</p>
         <div className="space-y-1">
           <button
-            onClick={() => onLayerSelect(null)}
+            onClick={handleDeselectAll}
             className="w-full px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
           >
             Deselect All

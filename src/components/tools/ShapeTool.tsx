@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Tool } from './Tool';
 
 interface ShapeToolProps {
@@ -30,12 +30,28 @@ export const ShapeTool: React.FC<ShapeToolProps> = ({
   strokeWidth = 2,
   onStrokeWidthChange,
 }) => {
-  const shapes = [
+  const shapes = useMemo(() => [
     { value: 'rectangle', label: 'Rectangle', icon: '⬜' },
     { value: 'circle', label: 'Circle', icon: '⭕' },
     { value: 'triangle', label: 'Triangle', icon: '🔺' },
     { value: 'line', label: 'Line', icon: '📏' },
-  ] as const;
+  ] as const, []);
+
+  const handleShapeChange = useCallback((shape: 'rectangle' | 'circle' | 'triangle' | 'line') => {
+    onShapeChange?.(shape);
+  }, [onShapeChange]);
+
+  const handleFillColorChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    onFillColorChange?.(e.target.value);
+  }, [onFillColorChange]);
+
+  const handleStrokeColorChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    onStrokeColorChange?.(e.target.value);
+  }, [onStrokeColorChange]);
+
+  const handleStrokeWidthChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    onStrokeWidthChange?.(parseInt(e.target.value));
+  }, [onStrokeWidthChange]);
 
   return (
     <div className="space-y-2">
@@ -57,7 +73,7 @@ export const ShapeTool: React.FC<ShapeToolProps> = ({
               {shapes.map(shape => (
                 <button
                   key={shape.value}
-                  onClick={() => onShapeChange?.(shape.value)}
+                  onClick={() => handleShapeChange(shape.value)}
                   className={`px-2 py-1 text-xs rounded border flex items-center gap-1 ${
                     selectedShape === shape.value
                       ? 'bg-blue-500 text-white border-blue-500'
@@ -76,7 +92,7 @@ export const ShapeTool: React.FC<ShapeToolProps> = ({
             <input
               type="color"
               value={fillColor}
-              onChange={(e) => onFillColorChange?.(e.target.value)}
+              onChange={handleFillColorChange}
               className="w-full h-6 border border-gray-300 rounded"
             />
           </div>
@@ -86,7 +102,7 @@ export const ShapeTool: React.FC<ShapeToolProps> = ({
             <input
               type="color"
               value={strokeColor}
-              onChange={(e) => onStrokeColorChange?.(e.target.value)}
+              onChange={handleStrokeColorChange}
               className="w-full h-6 border border-gray-300 rounded"
             />
           </div>
@@ -98,7 +114,7 @@ export const ShapeTool: React.FC<ShapeToolProps> = ({
               min="0"
               max="10"
               value={strokeWidth}
-              onChange={(e) => onStrokeWidthChange?.(parseInt(e.target.value))}
+              onChange={handleStrokeWidthChange}
               className="w-full"
             />
             <span className="text-xs text-gray-500">{strokeWidth}px</span>

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Tool } from './Tool';
 
 interface ZoomToolProps {
@@ -20,6 +20,20 @@ export const ZoomTool: React.FC<ZoomToolProps> = ({
   onZoomOut,
   onZoomReset,
 }) => {
+  const handleZoomIn = useCallback(() => {
+    onZoomIn?.();
+  }, [onZoomIn]);
+
+  const handleZoomOut = useCallback(() => {
+    onZoomOut?.();
+  }, [onZoomOut]);
+
+  const handleZoomReset = useCallback(() => {
+    onZoomReset?.();
+  }, [onZoomReset]);
+
+  const zoomDisplayText = useMemo(() => `${zoomLevel}%`, [zoomLevel]);
+
   return (
     <div className="space-y-2">
       <Tool
@@ -33,26 +47,26 @@ export const ZoomTool: React.FC<ZoomToolProps> = ({
       {/* Zoom Controls - Always show for quick access */}
       <div className="ml-4 space-y-2 p-2 bg-gray-50 rounded border">
         <div className="text-xs text-gray-600 text-center">
-          {zoomLevel}%
+          {zoomDisplayText}
         </div>
         
         <div className="flex gap-1">
           <button
-            onClick={onZoomOut}
+            onClick={handleZoomOut}
             className="flex-1 px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
             title="Zoom Out"
           >
             −
           </button>
           <button
-            onClick={onZoomReset}
+            onClick={handleZoomReset}
             className="flex-1 px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
             title="Reset Zoom (100%)"
           >
             ⌂
           </button>
           <button
-            onClick={onZoomIn}
+            onClick={handleZoomIn}
             className="flex-1 px-2 py-1 text-xs bg-white border border-gray-300 rounded hover:bg-gray-50"
             title="Zoom In"
           >

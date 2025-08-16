@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useMemo } from 'react';
 import { Canvas, Layer, ImageLayer } from '@/types/core';
 
 interface CanvasRendererProps {
@@ -8,6 +8,9 @@ interface CanvasRendererProps {
   selectedLayer: Layer | null;
   className?: string;
   onCanvasRef?: (ref: HTMLCanvasElement | null) => void;
+  zoomLevel?: number;
+  maxWidth?: number;
+  maxHeight?: number;
 }
 
 export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
@@ -15,12 +18,37 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
   selectedLayer,
   className = '',
   onCanvasRef,
+  zoomLevel = 100,
+  maxWidth = 1200,
+  maxHeight = 800,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  useEffect(() => {
-    onCanvasRef?.(canvasRef.current);
+  const onCanvasRefCallback = useCallback((ref: HTMLCanvasElement | null) => {
+    onCanvasRef?.(ref);
   }, [onCanvasRef]);
+
+  useEffect(() => {
+    onCanvasRefCallback(canvasRef.current);
+  }, [onCanvasRefCallback]);
+
+  // Calculate display dimensions based on zoom and constraints
+  const displayDimensions = useMemo(() => {
+    const zoomFactor = zoomLevel / 100;
+    const scaledWidth = canvas.width * zoomFactor;
+    const scaledHeight = canvas.height * zoomFactor;
+    
+    // Calculate scale factor to fit within max dimensions
+    const scaleX = maxWidth / scaledWidth;
+    const scaleY = maxHeight / scaledHeight;
+    const constraintScale = Math.min(1, scaleX, scaleY);
+    
+    return {
+      width: scaledWidth * constraintScale,
+      height: scaledHeight * constraintScale,
+      scale: constraintScale * zoomFactor,
+    };
+  }, [canvas.width, canvas.height, zoomLevel, maxWidth, maxHeight]);
 
   const drawLayer = useCallback((ctx: CanvasRenderingContext2D, layer: Layer) => {
     if (layer instanceof ImageLayer) {
@@ -92,9 +120,12 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
       height={canvas.height}
       className={`border border-gray-300 ${className}`}
       style={{
-        maxWidth: '100%',
-        maxHeight: '100%',
+        width: `${displayDimensions.width}px`,
+        height: `${displayDimensions.height}px`,
+        maxWidth: `${maxWidth}px`,
+        maxHeight: `${maxHeight}px`,
         objectFit: 'contain',
+        imageRendering: zoomLevel > 200 ? 'pixelated' : 'auto',
       }}
     />
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -23,9 +23,15 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onCancel,
   type = 'danger',
 }) => {
-  if (!isOpen) return null;
+  const handleConfirm = useCallback(() => {
+    onConfirm();
+  }, [onConfirm]);
 
-  const getButtonStyles = () => {
+  const handleCancel = useCallback(() => {
+    onCancel();
+  }, [onCancel]);
+
+  const buttonStyles = useMemo(() => {
     switch (type) {
       case 'danger':
         return 'bg-red-500 hover:bg-red-600 text-white';
@@ -36,7 +42,9 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       default:
         return 'bg-red-500 hover:bg-red-600 text-white';
     }
-  };
+  }, [type]);
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -46,14 +54,14 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         
         <div className="flex gap-3 justify-end">
           <button
-            onClick={onCancel}
+            onClick={handleCancel}
             className="px-4 py-2 text-sm bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition-colors"
           >
             {cancelText}
           </button>
           <button
-            onClick={onConfirm}
-            className={`px-4 py-2 text-sm rounded transition-colors ${getButtonStyles()}`}
+            onClick={handleConfirm}
+            className={`px-4 py-2 text-sm rounded transition-colors ${buttonStyles}`}
           >
             {confirmText}
           </button>

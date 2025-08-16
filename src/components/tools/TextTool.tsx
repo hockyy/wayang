@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Tool } from './Tool';
 
 interface TextToolProps {
@@ -34,10 +34,30 @@ export const TextTool: React.FC<TextToolProps> = ({
   isItalic = false,
   onItalicChange,
 }) => {
-  const fontOptions = [
+  const fontOptions = useMemo(() => [
     'Arial', 'Helvetica', 'Times New Roman', 'Georgia', 
     'Verdana', 'Comic Sans MS', 'Impact', 'Courier New'
-  ];
+  ], []);
+
+  const handleFontSizeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    onFontSizeChange?.(parseInt(e.target.value) || 16);
+  }, [onFontSizeChange]);
+
+  const handleFontFamilyChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    onFontFamilyChange?.(e.target.value);
+  }, [onFontFamilyChange]);
+
+  const handleColorChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    onColorChange?.(e.target.value);
+  }, [onColorChange]);
+
+  const handleBoldToggle = useCallback(() => {
+    onBoldChange?.(!isBold);
+  }, [onBoldChange, isBold]);
+
+  const handleItalicToggle = useCallback(() => {
+    onItalicChange?.(!isItalic);
+  }, [onItalicChange, isItalic]);
 
   return (
     <div className="space-y-2">
@@ -57,7 +77,7 @@ export const TextTool: React.FC<TextToolProps> = ({
             <label className="block text-xs text-gray-600 mb-1">Font Family</label>
             <select
               value={fontFamily}
-              onChange={(e) => onFontFamilyChange?.(e.target.value)}
+              onChange={handleFontFamilyChange}
               className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
             >
               {fontOptions.map(font => (
@@ -73,7 +93,7 @@ export const TextTool: React.FC<TextToolProps> = ({
               min="8"
               max="72"
               value={fontSize}
-              onChange={(e) => onFontSizeChange?.(parseInt(e.target.value) || 16)}
+              onChange={handleFontSizeChange}
               className="w-full px-2 py-1 text-xs border border-gray-300 rounded"
             />
           </div>
@@ -83,14 +103,14 @@ export const TextTool: React.FC<TextToolProps> = ({
             <input
               type="color"
               value={color}
-              onChange={(e) => onColorChange?.(e.target.value)}
+              onChange={handleColorChange}
               className="w-full h-6 border border-gray-300 rounded"
             />
           </div>
           
           <div className="flex gap-2">
             <button
-              onClick={() => onBoldChange?.(!isBold)}
+              onClick={handleBoldToggle}
               className={`flex-1 px-2 py-1 text-xs rounded border font-bold ${
                 isBold 
                   ? 'bg-blue-500 text-white border-blue-500' 
@@ -100,7 +120,7 @@ export const TextTool: React.FC<TextToolProps> = ({
               B
             </button>
             <button
-              onClick={() => onItalicChange?.(!isItalic)}
+              onClick={handleItalicToggle}
               className={`flex-1 px-2 py-1 text-xs rounded border italic ${
                 isItalic 
                   ? 'bg-blue-500 text-white border-blue-500' 

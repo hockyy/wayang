@@ -14,6 +14,7 @@ export default function DalangPage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [zoomLevel, setZoomLevel] = React.useState(100);
   const [isToolPanelCollapsed, setIsToolPanelCollapsed] = React.useState(false);
+  const [isCanvasPanelCollapsed, setIsCanvasPanelCollapsed] = React.useState(false);
   
   const {
     canvases,
@@ -44,7 +45,7 @@ export default function DalangPage() {
     return null;
   }, [activeCanvasId, getTopLayerAt]);
 
-  const handleLayerSelect = useCallback((_layer: Layer | null) => {
+  const handleLayerSelect = useCallback(() => {
     // This will be used by the mouse hook
   }, []);
 
@@ -139,6 +140,8 @@ export default function DalangPage() {
         onCanvasDelete={deleteCanvas}
         allowCreate={true}
         allowDelete={true}
+        isCollapsed={isCanvasPanelCollapsed}
+        onToggleCollapse={() => setIsCanvasPanelCollapsed(!isCanvasPanelCollapsed)}
       />
     </div>
   );
@@ -193,6 +196,9 @@ export default function DalangPage() {
                 canvas={activeCanvas}
                 selectedLayer={selectedLayer}
                 className="shadow-lg"
+                zoomLevel={zoomLevel}
+                maxWidth={1200}
+                maxHeight={600}
                 onCanvasRef={(ref) => {
                   if (canvasRef.current !== ref) {
                     (canvasRef as React.MutableRefObject<HTMLCanvasElement | null>).current = ref;
@@ -223,6 +229,8 @@ export default function DalangPage() {
           onCanvasDelete={deleteCanvas}
           allowCreate={true}
           allowDelete={true}
+          isCollapsed={isCanvasPanelCollapsed}
+          onToggleCollapse={() => setIsCanvasPanelCollapsed(!isCanvasPanelCollapsed)}
         />
       </div>
     </div>

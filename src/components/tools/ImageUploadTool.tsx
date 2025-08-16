@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useRef, useCallback } from 'react';
 import { Tool } from './Tool';
 
 interface ImageUploadToolProps {
@@ -14,32 +14,42 @@ export const ImageUploadTool: React.FC<ImageUploadToolProps> = ({
   isUploading,
   uploadError,
 }) => {
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       onImageUpload(file);
       // Reset the input so the same file can be selected again
-      event.target.value = '';
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
-  };
+  }, [onImageUpload]);
+
+  const handleToolClick = useCallback(() => {
+    if (!isUploading && fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  }, [isUploading]);
 
   return (
     <div className="space-y-2">
-      <label className="block cursor-pointer">
-        <input
-          type="file"
-          accept="image/*"
-          onChange={handleFileChange}
-          disabled={isUploading}
-          className="hidden"
-        />
-        <Tool
-          name={isUploading ? "Uploading..." : "Add Image"}
-          isDisabled={isUploading}
-          icon="🖼️"
-          description="Upload and add image layers (JPG, PNG, GIF, WebP)"
-        />
-      </label>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileChange}
+        disabled={isUploading}
+        className="hidden"
+      />
+      <Tool
+        name={isUploading ? "Uploading..." : "Add Image"}
+        isDisabled={isUploading}
+        icon="🖼️"
+        description="Upload and add image layers (JPG, PNG, GIF, WebP)"
+        onClick={handleToolClick}
+      />
       
       {uploadError && (
         <div className="ml-4 p-2 bg-red-50 border border-red-200 rounded">

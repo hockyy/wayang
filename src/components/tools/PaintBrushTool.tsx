@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Tool } from './Tool';
 
 interface PaintBrushToolProps {
@@ -26,6 +26,18 @@ export const PaintBrushTool: React.FC<PaintBrushToolProps> = ({
   color = '#000000',
   onColorChange,
 }) => {
+  const handleBrushSizeChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    onBrushSizeChange?.(parseInt(e.target.value));
+  }, [onBrushSizeChange]);
+
+  const handleOpacityChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    onOpacityChange?.(parseInt(e.target.value));
+  }, [onOpacityChange]);
+
+  const handleColorChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    onColorChange?.(e.target.value);
+  }, [onColorChange]);
+
   return (
     <div className="space-y-2">
       <Tool
@@ -47,7 +59,7 @@ export const PaintBrushTool: React.FC<PaintBrushToolProps> = ({
               min="1"
               max="50"
               value={brushSize}
-              onChange={(e) => onBrushSizeChange?.(parseInt(e.target.value))}
+              onChange={handleBrushSizeChange}
               className="w-full"
             />
             <span className="text-xs text-gray-500">{brushSize}px</span>
@@ -60,7 +72,7 @@ export const PaintBrushTool: React.FC<PaintBrushToolProps> = ({
               min="1"
               max="100"
               value={opacity}
-              onChange={(e) => onOpacityChange?.(parseInt(e.target.value))}
+              onChange={handleOpacityChange}
               className="w-full"
             />
             <span className="text-xs text-gray-500">{opacity}%</span>
@@ -71,7 +83,7 @@ export const PaintBrushTool: React.FC<PaintBrushToolProps> = ({
             <input
               type="color"
               value={color}
-              onChange={(e) => onColorChange?.(e.target.value)}
+              onChange={handleColorChange}
               className="w-full h-6 border border-gray-300 rounded"
             />
           </div>

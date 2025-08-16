@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { Canvas, BackgroundConfig } from '@/types/core';
 import { ConfirmDialog } from './ConfirmDialog';
 
@@ -13,6 +13,8 @@ interface CanvasPanelProps {
   onCanvasDelete?: (canvasId: string) => void;
   allowCreate?: boolean;
   allowDelete?: boolean;
+  isCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
 export const CanvasPanel: React.FC<CanvasPanelProps> = ({
@@ -24,20 +26,25 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
   onCanvasDelete,
   allowCreate = false,
   allowDelete = false,
+  isCollapsed = false,
+  onToggleCollapse,
 }) => {
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState<boolean>(false);
   const [createMode, setCreateMode] = useState<'blank' | 'image'>('blank');
-  const [newCanvasWidth, setNewCanvasWidth] = useState(800);
-  const [newCanvasHeight, setNewCanvasHeight] = useState(600);
-  const [newCanvasBgColor, setNewCanvasBgColor] = useState('#ffffff');
-  const [isCreatingFromImage, setIsCreatingFromImage] = useState(false);
+  const [newCanvasWidth, setNewCanvasWidth] = useState<number>(800);
+  const [newCanvasHeight, setNewCanvasHeight] = useState<number>(600);
+  const [newCanvasBgColor, setNewCanvasBgColor] = useState<string>('#ffffff');
+  const [isCreatingFromImage, setIsCreatingFromImage] = useState<boolean>(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; canvasId: string; canvasName: string }>({
     isOpen: false,
     canvasId: '',
     canvasName: '',
   });
+  
+  // Ref for file input to properly reset it
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleCreateCanvas = () => {
+  const handleCreateCanvas = useCallback(() => {
     if (onCanvasCreate) {
       onCanvasCreate(newCanvasWidth, newCanvasHeight, { type: 'color', color: newCanvasBgColor });
       setShowCreateForm(false);
@@ -47,9 +54,9 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
       setNewCanvasBgColor('#ffffff');
       setCreateMode('blank');
     }
-  };
+  }, [onCanvasCreate, newCanvasWidth, newCanvasHeight, newCanvasBgColor]);
 
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file && onCanvasCreateFromImage) {
       setIsCreatingFromImage(true);
@@ -66,13 +73,15 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
         // Could add error state here
       } finally {
         setIsCreatingFromImage(false);
-        // Reset the input
-        event.target.value = '';
+        // Reset the file input properly
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
       }
     }
-  };
+  }, [onCanvasCreateFromImage]);
 
-  const handleCancelCreate = () => {
+  const handleCancelCreate = useCallback(() => {
     setShowCreateForm(false);
     // Reset form values to prevent controlled/uncontrolled issues
     setNewCanvasWidth(800);
@@ -80,40 +89,73 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
     setNewCanvasBgColor('#ffffff');
     setCreateMode('blank');
     setIsCreatingFromImage(false);
-  };
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }, []);
 
-  const handleDeleteCanvas = (canvasId: string, canvasName: string) => {
+  const handleDeleteCanvas = useCallback((canvasId: string, canvasName: string) => {
     setDeleteConfirm({
       isOpen: true,
       canvasId,
       canvasName,
     });
-  };
+  }, []);
 
-  const confirmDeleteCanvas = () => {
+  const confirmDeleteCanvas = useCallback(() => {
     if (onCanvasDelete && deleteConfirm.canvasId) {
       onCanvasDelete(deleteConfirm.canvasId);
     }
     setDeleteConfirm({ isOpen: false, canvasId: '', canvasName: '' });
-  };
+  }, [onCanvasDelete, deleteConfirm.canvasId]);
 
-  const cancelDeleteCanvas = () => {
+  const cancelDeleteCanvas = useCallback(() => {
     setDeleteConfirm({ isOpen: false, canvasId: '', canvasName: '' });
-  };
+  }, []);
+
+  const sortedCanvases = useMemo(() => {
+    return canvases.slice().sort((a, b) => a.id.localeCompare(b.id));
+  }, [canvases]);
 
   return (
-    <div className="w-64 bg-gray-100 border-l border-gray-300 p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-800">Canvases</h3>
-        {allowCreate && (
+    <div className={`${isCollapsed ? 'w-12' : 'w-64'} bg-gray-100 border-l border-gray-300 transition-all duration-300 flex flex-col`}>
+      {/* Header with collapse toggle */}
+      <div className="p-2 border-b border-gray-300 flex items-center justify-between">
+        {!isCollapsed && <h3 className="text-lg font-semibold text-gray-800">Canvases</h3>}
+        <div className="flex items-center gap-2">
+          {!isCollapsed && allowCreate && (
+            <button
+              onClick={() => setShowCreateForm(!showCreateForm)}
+              className="px-2 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600"
+              title="Create new canvas"
+            >
+              +
+            </button>
+          )}
           <button
-            onClick={() => setShowCreateForm(!showCreateForm)}
-            className="px-2 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600"
+            onClick={onToggleCollapse}
+            className="p-1 hover:bg-gray-200 rounded"
+            title={isCollapsed ? 'Expand Canvases' : 'Collapse Canvases'}
           >
-            +
+            <svg
+              className="w-4 h-4 text-gray-600"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d={isCollapsed ? "M15 19l-7-7 7-7" : "M9 5l7 7-7 7"}
+              />
+            </svg>
           </button>
-        )}
+        </div>
       </div>
+
+      <div className={`${isCollapsed ? 'p-1' : 'p-4'} flex-1 overflow-y-auto`}>
 
       {/* Create Canvas Form */}
       {showCreateForm && allowCreate && (
@@ -152,8 +194,16 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
                 <label className="block text-xs text-gray-600">Width (px)</label>
                 <input
                   type="number"
-                  value={newCanvasWidth || 800}
-                  onChange={(e) => setNewCanvasWidth(parseInt(e.target.value) || 800)}
+                  value={newCanvasWidth}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === '') {
+                      setNewCanvasWidth(800);
+                    } else {
+                      const numValue = parseInt(value);
+                      setNewCanvasWidth(isNaN(numValue) ? 800 : Math.max(100, Math.min(4000, numValue)));
+                    }
+                  }}
                   className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
                   min="100"
                   max="4000"
@@ -163,8 +213,16 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
                 <label className="block text-xs text-gray-600">Height (px)</label>
                 <input
                   type="number"
-                  value={newCanvasHeight || 600}
-                  onChange={(e) => setNewCanvasHeight(parseInt(e.target.value) || 600)}
+                  value={newCanvasHeight}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (value === '') {
+                      setNewCanvasHeight(600);
+                    } else {
+                      const numValue = parseInt(value);
+                      setNewCanvasHeight(isNaN(numValue) ? 600 : Math.max(100, Math.min(4000, numValue)));
+                    }
+                  }}
                   className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
                   min="100"
                   max="4000"
@@ -174,7 +232,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
                 <label className="block text-xs text-gray-600">Background</label>
                 <input
                   type="color"
-                  value={newCanvasBgColor || '#ffffff'}
+                  value={newCanvasBgColor}
                   onChange={(e) => setNewCanvasBgColor(e.target.value || '#ffffff')}
                   className="w-full h-8 border border-gray-300 rounded"
                 />
@@ -199,6 +257,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
               <div>
                 <label className="block text-xs text-gray-600 mb-1">Background Image</label>
                 <input
+                  ref={fileInputRef}
                   type="file"
                   accept="image/*"
                   onChange={handleImageUpload}
@@ -228,14 +287,16 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
         </div>
       )}
 
-      {/* Canvas List */}
-      {canvases.length === 0 ? (
-        <p className="text-sm text-gray-500 italic">
-          {allowCreate ? 'No canvases yet. Click + to create one.' : 'No canvases available.'}
-        </p>
-      ) : (
-        <div className="space-y-2">
-          {canvases.map((canvas, index) => (
+      {!isCollapsed && (
+        <>
+          {/* Canvas List */}
+          {sortedCanvases.length === 0 ? (
+            <p className="text-sm text-gray-500 italic">
+              {allowCreate ? 'No canvases yet. Click + to create one.' : 'No canvases available.'}
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {sortedCanvases.map((canvas, index) => (
             <div
               key={canvas.id}
               className={`p-3 rounded border transition-colors ${
@@ -305,6 +366,28 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
           ))}
         </div>
       )}
+        </>
+      )}
+
+      {/* Collapsed Canvas List - just show active canvas indicator */}
+      {isCollapsed && sortedCanvases.length > 0 && (
+        <div className="space-y-1">
+          {sortedCanvases.map((canvas, index) => (
+            <button
+              key={canvas.id}
+              onClick={() => onCanvasSelect(canvas.id)}
+              className={`w-full p-2 rounded border text-xs transition-colors ${
+                activeCanvasId === canvas.id
+                  ? 'bg-blue-500 text-white border-blue-500'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              }`}
+              title={`Canvas ${index + 1} (${canvas.width}×${canvas.height})`}
+            >
+              {index + 1}
+            </button>
+          ))}
+        </div>
+      )}
       
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
@@ -317,6 +400,7 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
         onCancel={cancelDeleteCanvas}
         type="danger"
       />
+      </div>
     </div>
   );
 };
