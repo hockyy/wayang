@@ -13,6 +13,7 @@ export default function ViewPage() {
     canvases,
     activeCanvas,
     activeCanvasId,
+    activeCanvasLayers,
     setActiveCanvas,
   } = useCanvas();
 
@@ -59,7 +60,7 @@ export default function ViewPage() {
               Canvas: {activeCanvas.width}×{activeCanvas.height}
             </div>
             <div className="text-sm text-gray-500">
-              Layers: {activeCanvas.layers.length}
+              Layers: {activeCanvasLayers.length}
             </div>
           </div>
         </div>
@@ -109,16 +110,16 @@ export default function ViewPage() {
                 )}
               </div>
               <div className="text-sm text-gray-600">
-                <span className="font-medium">Layers:</span> {activeCanvas.layers.length}
+                <span className="font-medium">Layers:</span> {activeCanvasLayers.length}
               </div>
             </div>
             
             {/* Layer List for Viewing */}
-            {activeCanvas.layers.length > 0 && (
+            {activeCanvasLayers.length > 0 && (
               <div className="mt-3 pt-3 border-t border-gray-300">
                 <div className="text-sm font-medium text-gray-700 mb-2">Layer Stack (top to bottom):</div>
                 <div className="flex flex-wrap gap-2">
-                  {[...activeCanvas.layers]
+                  {[...activeCanvasLayers]
                     .sort((a, b) => b.layerOrder - a.layerOrder)
                     .map((layer, index) => (
                       <div

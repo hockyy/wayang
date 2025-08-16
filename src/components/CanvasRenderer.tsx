@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useRef, useEffect, useCallback, useMemo } from 'react';
-import { Canvas, Layer, ImageLayer } from '@/types/core';
+import { Canvas, Layer, ImageLayer, Point } from '@/types/core';
+import { useResizeHandles } from '@/hooks/useResizeHandles';
 
 interface CanvasRendererProps {
   canvas: Canvas;
@@ -50,7 +51,16 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
     };
   }, [canvas.width, canvas.height, zoomLevel, maxWidth, maxHeight]);
 
+  // Get resize handles for the selected layer
+  const isSelectedLayerPresent = !!selectedLayer;
+  const { drawHandles } = useResizeHandles({ 
+    layer: selectedLayer || new Layer(new Point(0, 0), new Point(0, 0), 0, 0, 0), 
+    isSelected: isSelectedLayerPresent 
+  });
+
   const drawLayer = useCallback((ctx: CanvasRenderingContext2D, layer: Layer) => {
+    const isSelected = selectedLayer && selectedLayer.id === layer.id;
+    
     if (layer instanceof ImageLayer) {
       const img = new Image();
       img.onload = () => {
@@ -62,17 +72,22 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
         ctx.drawImage(img, x, y, width, height);
         
         // Draw selection border if this layer is selected
-        if (selectedLayer && selectedLayer.id === layer.id) {
+        if (isSelected) {
           ctx.strokeStyle = '#007bff';
           ctx.lineWidth = 2;
           ctx.setLineDash([5, 5]);
           ctx.strokeRect(x - 2, y - 2, width + 4, height + 4);
           ctx.setLineDash([]);
+          
+          // Draw resize handles using the hook (only for selected layer)
+          if (selectedLayer && selectedLayer.id === layer.id) {
+            drawHandles(ctx);
+          }
         }
       };
       img.src = layer.srcPath;
     }
-  }, [selectedLayer]);
+  }, [selectedLayer, drawHandles]);
 
   const render = useCallback(() => {
     const canvasElement = canvasRef.current;

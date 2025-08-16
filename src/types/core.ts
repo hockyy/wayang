@@ -117,6 +117,80 @@ export class Layer {
     this.topRight.x += offsetX;
     this.topRight.y += offsetY;
   }
+
+  // Resize the layer by updating corner positions
+  resize(newBottomLeft: Point, newTopRight: Point, maintainAspectRatio: boolean = false): void {
+    if (maintainAspectRatio) {
+      const originalAspectRatio = this.getAspectRatio().getFloat();
+      const newWidth = Math.abs(newTopRight.x - newBottomLeft.x);
+      const newHeight = Math.abs(newTopRight.y - newBottomLeft.y);
+      const newAspectRatio = newWidth / newHeight;
+      
+      // Adjust dimensions to maintain aspect ratio
+      if (newAspectRatio > originalAspectRatio) {
+        // Width is too large, adjust it
+        const adjustedWidth = newHeight * originalAspectRatio;
+        if (newBottomLeft.x < newTopRight.x) {
+          newTopRight.x = newBottomLeft.x + adjustedWidth;
+        } else {
+          newBottomLeft.x = newTopRight.x + adjustedWidth;
+        }
+      } else if (newAspectRatio < originalAspectRatio) {
+        // Height is too large, adjust it
+        const adjustedHeight = newWidth / originalAspectRatio;
+        if (newBottomLeft.y < newTopRight.y) {
+          newTopRight.y = newBottomLeft.y + adjustedHeight;
+        } else {
+          newBottomLeft.y = newTopRight.y + adjustedHeight;
+        }
+      }
+    }
+    
+    this.bottomLeft = newBottomLeft;
+    this.topRight = newTopRight;
+  }
+
+  // Get resize handle positions for hit detection
+  getResizeHandles(): { topLeft: Point; topRight: Point; bottomLeft: Point; bottomRight: Point } {
+    const x = Math.min(this.bottomLeft.x, this.topRight.x);
+    const y = Math.min(this.bottomLeft.y, this.topRight.y);
+    const width = this.getWidth();
+    const height = this.getHeight();
+    
+    return {
+      topLeft: new Point(x, y),
+      topRight: new Point(x + width, y),
+      bottomLeft: new Point(x, y + height),
+      bottomRight: new Point(x + width, y + height),
+    };
+  }
+
+  // Check if a point is near a resize handle
+  // Returns handle index: 0=topLeft, 1=topRight, 2=bottomRight, 3=bottomLeft
+  getHandleAt(point: Point, tolerance: number = 8): number | null {
+    const handles = this.getResizeHandles();
+    const handleSize = tolerance;
+    const handlePositions = [
+      handles.topLeft,     // 0
+      handles.topRight,    // 1
+      handles.bottomRight, // 2
+      handles.bottomLeft,  // 3
+    ];
+    
+    for (let i = 0; i < handlePositions.length; i++) {
+      const handlePos = handlePositions[i];
+      if (
+        point.x >= handlePos.x - handleSize / 2 &&
+        point.x <= handlePos.x + handleSize / 2 &&
+        point.y >= handlePos.y - handleSize / 2 &&
+        point.y <= handlePos.y + handleSize / 2
+      ) {
+        return i;
+      }
+    }
+    
+    return null;
+  }
 }
 
 export class ImageLayer extends Layer {
@@ -156,6 +230,8 @@ export class Canvas {
 
   addLayer(layer: Layer): void {
     this.layers.push(layer);
+    console.log(layer);
+    console.log("adding layer");
     this.sortLayers();
   }
 
@@ -187,7 +263,7 @@ export interface BackgroundConfig {
   imageHeight?: number;
 }
 
-export type MouseMode = 'pan' | 'move' | 'zoom';
+export type MouseMode = 'pan' | 'move' | 'zoom' | 'resize';
 
 export interface Room {
   id: string;

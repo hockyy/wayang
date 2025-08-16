@@ -8,7 +8,7 @@ import { CanvasRenderer } from '@/components/CanvasRenderer';
 import { ToolPanel } from '@/components/ToolPanel';
 import { LayerPanel } from '@/components/LayerPanel';
 import { CanvasPanel } from '@/components/CanvasPanel';
-import { Point, ImageLayer, Layer } from '@/types/core';
+import { Point, ImageLayer } from '@/types/core';
 
 export default function DalangPage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -20,6 +20,7 @@ export default function DalangPage() {
     canvases,
     activeCanvas,
     activeCanvasId,
+    activeCanvasLayers,
     createCanvas,
     createCanvasFromImage,
     deleteCanvas,
@@ -27,6 +28,7 @@ export default function DalangPage() {
     addLayerToCanvas,
     removeLayerFromCanvas,
     moveLayer,
+    resizeLayer,
     getTopLayerAt,
   } = useCanvas();
 
@@ -37,6 +39,12 @@ export default function DalangPage() {
       moveLayer(activeCanvasId, layerId, offsetX, offsetY);
     }
   }, [activeCanvasId, moveLayer]);
+
+  const handleLayerResize = useCallback((layerId: string, newBottomLeft: Point, newTopRight: Point, maintainAspectRatio: boolean) => {
+    if (activeCanvasId) {
+      resizeLayer(activeCanvasId, layerId, newBottomLeft, newTopRight, maintainAspectRatio);
+    }
+  }, [activeCanvasId, resizeLayer]);
 
   const handleGetTopLayerAt = useCallback((point: Point) => {
     if (activeCanvasId) {
@@ -55,9 +63,11 @@ export default function DalangPage() {
     selectedLayer,
     setSelectedLayer,
     isDragging,
+    isResizing,
   } = useMouse({
     canvasRef,
     onLayerMove: handleLayerMove,
+    onLayerResize: handleLayerResize,
     onLayerSelect: handleLayerSelect,
     getTopLayerAt: handleGetTopLayerAt,
     mode: 'move',
@@ -163,6 +173,9 @@ export default function DalangPage() {
             {isDragging && (
               <div className="text-blue-500 text-sm">Moving layer...</div>
             )}
+            {isResizing && (
+              <div className="text-green-500 text-sm">Resizing layer... (Hold Shift to maintain aspect ratio)</div>
+            )}
             <div className="text-sm text-gray-500">
               Mode: {mouseMode === 'move' ? 'Move' : 'Pan'}
             </div>
@@ -211,7 +224,7 @@ export default function DalangPage() {
           {/* Bottom - Layer Panel */}
           <div className="h-48 border-t border-gray-300">
             <LayerPanel
-              layers={activeCanvas.layers}
+              layers={activeCanvasLayers}
               selectedLayer={selectedLayer}
               onLayerSelect={setSelectedLayer}
               onLayerDelete={handleLayerDelete}

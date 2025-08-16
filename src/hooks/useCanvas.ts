@@ -9,6 +9,7 @@ export interface UseCanvasReturn {
   canvases: Canvas[];
   activeCanvas: Canvas | null;
   activeCanvasId: string | null;
+  activeCanvasLayers: Layer[];
   createCanvas: (width: number, height: number, bg: BackgroundConfig) => Canvas;
   createCanvasFromImage: (file: File) => Promise<Canvas>;
   deleteCanvas: (canvasId: string) => void;
@@ -17,6 +18,7 @@ export interface UseCanvasReturn {
   removeLayerFromCanvas: (canvasId: string, layerId: string) => void;
   updateLayer: (canvasId: string, layerId: string, updates: Partial<Layer>) => void;
   moveLayer: (canvasId: string, layerId: string, offsetX: number, offsetY: number) => void;
+  resizeLayer: (canvasId: string, layerId: string, newBottomLeft: Point, newTopRight: Point, maintainAspectRatio: boolean) => void;
   getTopLayerAt: (canvasId: string, point: Point) => Layer | null;
 }
 
@@ -27,6 +29,10 @@ export const useCanvas = ({}: UseCanvasProps = {}): UseCanvasReturn => {
   const activeCanvas = useMemo(() => {
     return canvases.find(canvas => canvas.id === activeCanvasId) || null;
   }, [canvases, activeCanvasId]);
+
+  const activeCanvasLayers = useMemo(() => {
+    return activeCanvas?.layers || [];
+  }, [activeCanvas]);
 
   const createCanvas = useCallback((width: number, height: number, bg: BackgroundConfig): Canvas => {
     const newCanvas = new Canvas(width, height, bg);
@@ -118,8 +124,11 @@ export const useCanvas = ({}: UseCanvasProps = {}): UseCanvasReturn => {
   const addLayerToCanvas = useCallback((canvasId: string, layer: Layer) => {
     setCanvases(prev => prev.map(canvas => {
       if (canvas.id === canvasId) {
-        const updatedCanvas = Object.assign(Object.create(Object.getPrototypeOf(canvas)), canvas);
-        updatedCanvas.addLayer(layer);
+        // Create a completely new canvas object with new layers array
+        const updatedCanvas = new Canvas(canvas.width, canvas.height, canvas.bg);
+        updatedCanvas.id = canvas.id; // Keep the same ID
+        updatedCanvas.layers = [...canvas.layers, layer]; // Create new array with new layer
+        updatedCanvas.layers.sort((a, b) => a.layerOrder - b.layerOrder); // Sort layers
         return updatedCanvas;
       }
       return canvas;
@@ -129,8 +138,10 @@ export const useCanvas = ({}: UseCanvasProps = {}): UseCanvasReturn => {
   const removeLayerFromCanvas = useCallback((canvasId: string, layerId: string) => {
     setCanvases(prev => prev.map(canvas => {
       if (canvas.id === canvasId) {
-        const updatedCanvas = Object.assign(Object.create(Object.getPrototypeOf(canvas)), canvas);
-        updatedCanvas.removeLayer(layerId);
+        // Create a completely new canvas object with filtered layers array
+        const updatedCanvas = new Canvas(canvas.width, canvas.height, canvas.bg);
+        updatedCanvas.id = canvas.id; // Keep the same ID
+        updatedCanvas.layers = canvas.layers.filter(layer => layer.id !== layerId); // Create new filtered array
         return updatedCanvas;
       }
       return canvas;
@@ -140,10 +151,12 @@ export const useCanvas = ({}: UseCanvasProps = {}): UseCanvasReturn => {
   const updateLayer = useCallback((canvasId: string, layerId: string, updates: Partial<Layer>) => {
     setCanvases(prev => prev.map(canvas => {
       if (canvas.id === canvasId) {
-        const updatedCanvas = Object.assign(Object.create(Object.getPrototypeOf(canvas)), canvas);
-        updatedCanvas.layers = updatedCanvas.layers.map((layer: Layer) => {
+        // Create a completely new canvas object with updated layers array
+        const updatedCanvas = new Canvas(canvas.width, canvas.height, canvas.bg);
+        updatedCanvas.id = canvas.id; // Keep the same ID
+        updatedCanvas.layers = canvas.layers.map((layer: Layer) => {
           if (layer.id === layerId) {
-            return Object.assign(layer, updates);
+            return Object.assign(Object.create(Object.getPrototypeOf(layer)), layer, updates);
           }
           return layer;
         });
@@ -156,11 +169,39 @@ export const useCanvas = ({}: UseCanvasProps = {}): UseCanvasReturn => {
   const moveLayer = useCallback((canvasId: string, layerId: string, offsetX: number, offsetY: number) => {
     setCanvases(prev => prev.map(canvas => {
       if (canvas.id === canvasId) {
-        const updatedCanvas = Object.assign(Object.create(Object.getPrototypeOf(canvas)), canvas);
-        const layer = updatedCanvas.layers.find((l: Layer) => l.id === layerId);
-        if (layer) {
-          layer.move(offsetX, offsetY);
-        }
+        // Create a completely new canvas object with moved layer
+        const updatedCanvas = new Canvas(canvas.width, canvas.height, canvas.bg);
+        updatedCanvas.id = canvas.id; // Keep the same ID
+        updatedCanvas.layers = canvas.layers.map((layer: Layer) => {
+          if (layer.id === layerId) {
+            // Create a new layer object with moved position
+            const movedLayer = Object.assign(Object.create(Object.getPrototypeOf(layer)), layer);
+            movedLayer.move(offsetX, offsetY);
+            return movedLayer;
+          }
+          return layer;
+        });
+        return updatedCanvas;
+      }
+      return canvas;
+    }));
+  }, []);
+
+  const resizeLayer = useCallback((canvasId: string, layerId: string, newBottomLeft: Point, newTopRight: Point, maintainAspectRatio: boolean) => {
+    setCanvases(prev => prev.map(canvas => {
+      if (canvas.id === canvasId) {
+        // Create a completely new canvas object with resized layer
+        const updatedCanvas = new Canvas(canvas.width, canvas.height, canvas.bg);
+        updatedCanvas.id = canvas.id; // Keep the same ID
+        updatedCanvas.layers = canvas.layers.map((layer: Layer) => {
+          if (layer.id === layerId) {
+            // Create a new layer object with resized dimensions
+            const resizedLayer = Object.assign(Object.create(Object.getPrototypeOf(layer)), layer);
+            resizedLayer.resize(newBottomLeft, newTopRight, maintainAspectRatio);
+            return resizedLayer;
+          }
+          return layer;
+        });
         return updatedCanvas;
       }
       return canvas;
@@ -176,6 +217,7 @@ export const useCanvas = ({}: UseCanvasProps = {}): UseCanvasReturn => {
     canvases,
     activeCanvas,
     activeCanvasId,
+    activeCanvasLayers,
     createCanvas,
     createCanvasFromImage,
     deleteCanvas,
@@ -184,6 +226,7 @@ export const useCanvas = ({}: UseCanvasProps = {}): UseCanvasReturn => {
     removeLayerFromCanvas,
     updateLayer,
     moveLayer,
+    resizeLayer,
     getTopLayerAt,
   };
 };
