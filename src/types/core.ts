@@ -180,10 +180,14 @@ export class Canvas {
 }
 
 export interface BackgroundConfig {
-  color: string;
+  type: 'color' | 'image';
+  color?: string;
+  imageSrc?: string;
+  imageWidth?: number;
+  imageHeight?: number;
 }
 
-export type MouseMode = 'pan' | 'move';
+export type MouseMode = 'pan' | 'move' | 'zoom';
 
 export interface Room {
   id: string;

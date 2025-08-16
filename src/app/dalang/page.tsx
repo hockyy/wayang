@@ -12,12 +12,16 @@ import { Point, ImageLayer, Layer } from '@/types/core';
 
 export default function DalangPage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [zoomLevel, setZoomLevel] = React.useState(100);
+  const [isToolPanelCollapsed, setIsToolPanelCollapsed] = React.useState(false);
   
   const {
     canvases,
     activeCanvas,
     activeCanvasId,
     createCanvas,
+    createCanvasFromImage,
+    deleteCanvas,
     setActiveCanvas,
     addLayerToCanvas,
     removeLayerFromCanvas,
@@ -25,12 +29,7 @@ export default function DalangPage() {
     getTopLayerAt,
   } = useCanvas();
 
-  // Create a default canvas if none exists
-  React.useEffect(() => {
-    if (canvases.length === 0) {
-      createCanvas(800, 600, { color: '#ffffff' });
-    }
-  }, [canvases.length, createCanvas]);
+  // No default canvas creation - let users start with empty state
 
   const handleLayerMove = useCallback((layerId: string, offsetX: number, offsetY: number) => {
     if (activeCanvasId) {
@@ -45,7 +44,7 @@ export default function DalangPage() {
     return null;
   }, [activeCanvasId, getTopLayerAt]);
 
-  const handleLayerSelect = useCallback((layer: Layer | null) => {
+  const handleLayerSelect = useCallback((_layer: Layer | null) => {
     // This will be used by the mouse hook
   }, []);
 
@@ -82,15 +81,70 @@ export default function DalangPage() {
     }
   }, [activeCanvasId, removeLayerFromCanvas, selectedLayer, setSelectedLayer]);
 
-  if (!activeCanvas) {
-    return (
-      <div className="h-screen flex items-center justify-center">
+  const handleCreateCanvasFromImage = useCallback(async (file: File) => {
+    try {
+      await createCanvasFromImage(file);
+    } catch (error) {
+      console.error('Failed to create canvas from image:', error);
+      throw error; // Re-throw to let the CanvasPanel handle the error display
+    }
+  }, [createCanvasFromImage]);
+
+  // Zoom functionality
+  const handleZoomIn = useCallback(() => {
+    setZoomLevel(prev => Math.min(prev + 25, 400));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setZoomLevel(prev => Math.max(prev - 25, 25));
+  }, []);
+
+  const handleZoomReset = useCallback(() => {
+    setZoomLevel(100);
+  }, []);
+
+  const renderEmptyState = () => (
+    <div className="h-screen flex">
+      {/* Left Sidebar - Tools */}
+      <ToolPanel
+        mouseMode={mouseMode}
+        onMouseModeChange={setMouseMode}
+        onImageUpload={uploadImage}
+        isUploading={isUploading}
+        uploadError={uploadError}
+        zoomLevel={zoomLevel}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onZoomReset={handleZoomReset}
+        isCollapsed={isToolPanelCollapsed}
+        onToggleCollapse={() => setIsToolPanelCollapsed(!isToolPanelCollapsed)}
+      />
+
+      {/* Center - Empty State */}
+      <div className="flex-1 flex items-center justify-center bg-gray-200">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading canvas...</p>
+          <div className="text-6xl mb-4">🎭</div>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Welcome to Wayang Dalang</h2>
+          <p className="text-gray-600 mb-6">Create your first canvas to get started</p>
         </div>
       </div>
-    );
+
+      {/* Right Sidebar - Canvas List */}
+      <CanvasPanel
+        canvases={canvases}
+        activeCanvasId={activeCanvasId}
+        onCanvasSelect={setActiveCanvas}
+        onCanvasCreate={createCanvas}
+        onCanvasCreateFromImage={handleCreateCanvasFromImage}
+        onCanvasDelete={deleteCanvas}
+        allowCreate={true}
+        allowDelete={true}
+      />
+    </div>
+  );
+
+  if (!activeCanvas) {
+    return renderEmptyState();
   }
 
   return (
@@ -122,6 +176,12 @@ export default function DalangPage() {
           onImageUpload={uploadImage}
           isUploading={isUploading}
           uploadError={uploadError}
+          zoomLevel={zoomLevel}
+          onZoomIn={handleZoomIn}
+          onZoomOut={handleZoomOut}
+          onZoomReset={handleZoomReset}
+          isCollapsed={isToolPanelCollapsed}
+          onToggleCollapse={() => setIsToolPanelCollapsed(!isToolPanelCollapsed)}
         />
 
         {/* Center - Canvas Area */}
@@ -159,7 +219,10 @@ export default function DalangPage() {
           activeCanvasId={activeCanvasId}
           onCanvasSelect={setActiveCanvas}
           onCanvasCreate={createCanvas}
+          onCanvasCreateFromImage={handleCreateCanvasFromImage}
+          onCanvasDelete={deleteCanvas}
           allowCreate={true}
+          allowDelete={true}
         />
       </div>
     </div>

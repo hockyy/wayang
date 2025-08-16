@@ -57,13 +57,28 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
     ctx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
     // Draw background
-    ctx.fillStyle = canvas.bg.color;
-    ctx.fillRect(0, 0, canvasElement.width, canvasElement.height);
-
-    // Draw layers in order
-    canvas.layers.forEach(layer => {
-      drawLayer(ctx, layer);
-    });
+    if (canvas.bg.type === 'image' && canvas.bg.imageSrc) {
+      const bgImg = new Image();
+      bgImg.onload = () => {
+        // Draw the background image to fill the entire canvas
+        ctx.drawImage(bgImg, 0, 0, canvasElement.width, canvasElement.height);
+        
+        // Draw layers on top of background
+        canvas.layers.forEach(layer => {
+          drawLayer(ctx, layer);
+        });
+      };
+      bgImg.src = canvas.bg.imageSrc;
+    } else {
+      // Draw solid color background
+      ctx.fillStyle = canvas.bg.color || '#ffffff';
+      ctx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+      
+      // Draw layers in order
+      canvas.layers.forEach(layer => {
+        drawLayer(ctx, layer);
+      });
+    }
   }, [canvas, drawLayer]);
 
   useEffect(() => {

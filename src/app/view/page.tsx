@@ -12,24 +12,32 @@ export default function ViewPage() {
     canvases,
     activeCanvas,
     activeCanvasId,
-    createCanvas,
     setActiveCanvas,
   } = useCanvas();
 
-  // Create a default canvas if none exists
-  React.useEffect(() => {
-    if (canvases.length === 0) {
-      createCanvas(800, 600, { color: '#ffffff' });
-    }
-  }, [canvases.length, createCanvas]);
+  // No default canvas creation - let users start with empty state
 
   if (!activeCanvas) {
     return (
-      <div className="h-screen flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading canvas...</p>
+      <div className="h-screen flex">
+        {/* Center - Empty State */}
+        <div className="flex-1 flex items-center justify-center bg-gray-200">
+          <div className="text-center">
+            <div className="text-6xl mb-4">👁️</div>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">Wayang Viewer</h2>
+            <p className="text-gray-600 mb-6">No canvases available to view</p>
+            <p className="text-sm text-gray-500">Ask a Dalang to create some canvases first</p>
+          </div>
         </div>
+
+        {/* Right Sidebar - Canvas List */}
+        <CanvasPanel
+          canvases={canvases}
+          activeCanvasId={activeCanvasId}
+          onCanvasSelect={setActiveCanvas}
+          allowCreate={false}
+          allowDelete={false}
+        />
       </div>
     );
   }
@@ -82,11 +90,17 @@ export default function ViewPage() {
               </div>
               <div className="text-sm text-gray-600">
                 <span className="font-medium">Background:</span>
-                <span
-                  className="inline-block w-4 h-4 ml-2 border border-gray-300 rounded"
-                  style={{ backgroundColor: activeCanvas.bg.color }}
-                />
-                {activeCanvas.bg.color}
+                {activeCanvas.bg.type === 'image' ? (
+                  <span className="ml-2">🖼️ Image Background</span>
+                ) : (
+                  <>
+                    <span
+                      className="inline-block w-4 h-4 ml-2 border border-gray-300 rounded"
+                      style={{ backgroundColor: activeCanvas.bg.color }}
+                    />
+                    {activeCanvas.bg.color}
+                  </>
+                )}
               </div>
               <div className="text-sm text-gray-600">
                 <span className="font-medium">Layers:</span> {activeCanvas.layers.length}
