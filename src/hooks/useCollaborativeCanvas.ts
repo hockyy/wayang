@@ -52,13 +52,11 @@ function layerToYjsData(layer: Layer) {
     oriHeight: layer.oriHeight,
   };
 
-  console.log('layerToYjsData', data);
-
   // For ImageLayer, store only the src path (no blob URLs)
   if (layer instanceof ImageLayer) {
     return {
       ...data,
-      srcPath: layer.srcPath, // Local file path only
+      srcPath: layer.srcPath,
       mimeType: layer.mimeType,
       isAnimated: layer.isAnimated,
     };
@@ -303,6 +301,7 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
     };
 
     init();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]); // canvases is intentionally excluded to avoid infinite re-initialization
 
   const syncCanvasToCollaboration = useCallback((canvas: Canvas) => {
@@ -328,6 +327,7 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
   // Helper functions to work directly with Yjs layer arrays
   const updateLayerInYjs = useCallback((layerId: string, layer: Layer) => {
     if (collaborationProvider) {
+      console.log('updateLayerInYjs', layerId, layer);
       const layerArray = collaborationProvider.getSharedArray(layerId);
       layerArray.delete(0, layerArray.length); // Clear existing
       layerArray.push([layerToYjsData(layer)]);
@@ -477,13 +477,32 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
 
   const updateLayer = useCallback((canvasId: string, layerId: string, updates: Partial<Layer>) => {
     // Only operate on the active canvas
-    if (!activeCanvas || activeCanvas.id !== canvasId) return;
+    if (!activeCanvas || activeCanvas.id !== canvasId) {
+      return;
+    }
     
     const layer = activeCanvas.layers.find(l => l.id === layerId);
-    if (!layer) return;
+    if (!layer) {
+      return;
+    }
     
-    // Create updated layer
-    const updatedLayer = Object.assign(Object.create(Object.getPrototypeOf(layer)), layer, updates);
+    // Create updated layer by cloning and applying updates
+    const updatedLayer = Object.assign(Object.create(Object.getPrototypeOf(layer)), layer);
+    
+    // Apply updates explicitly to handle Point objects correctly
+    if (updates.bottomLeft) {
+      updatedLayer.bottomLeft = new Point(updates.bottomLeft.x, updates.bottomLeft.y);
+    }
+    if (updates.topRight) {
+      updatedLayer.topRight = new Point(updates.topRight.x, updates.topRight.y);
+    }
+    
+    // Apply other updates
+    Object.keys(updates).forEach(key => {
+      if (key !== 'bottomLeft' && key !== 'topRight') {
+        (updatedLayer as Record<string, unknown>)[key] = (updates as Record<string, unknown>)[key];
+      }
+    });
     
     // Only update Yjs - local state will be updated by observers
     updateLayerInYjs(layerId, updatedLayer);

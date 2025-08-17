@@ -128,6 +128,10 @@ export interface UseMouseProps {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
   getTopLayerAt?: (point: Point) => Layer | null;
   mode?: MouseMode;
+  onLayerMove?: (layerId: string, newBottomLeft: Point, newTopRight: Point) => void;
+  onLayerResize?: (layerId: string, newBottomLeft: Point, newTopRight: Point, maintainAspectRatio: boolean) => void;
+  onLayerMoveEnd?: (layerId: string, newBottomLeft: Point, newTopRight: Point) => void;
+  onLayerResizeEnd?: (layerId: string, newBottomLeft: Point, newTopRight: Point, maintainAspectRatio: boolean) => void;
 }
 
 export interface UseMouseReturn {
@@ -145,7 +149,11 @@ export interface UseMouseReturn {
 export const useMouse = ({
   canvasRef,
   getTopLayerAt,
-  mode = 'move'
+  mode = 'move',
+  onLayerMove,
+  onLayerResize,
+  onLayerMoveEnd,
+  onLayerResizeEnd
 }: UseMouseProps): UseMouseReturn => {
   const [mouseMode, setMouseMode] = useState<MouseMode>(mode);
   const [selectedLayer, setSelectedLayer] = useState<Layer | null>(null);
@@ -158,6 +166,10 @@ export const useMouse = ({
   const dragStartPos = useRef<Point | null>(null);
   const initialLayerBounds = useRef<{ bottomLeft: Point; topRight: Point } | null>(null);
   const initialDragLayerBounds = useRef<{ bottomLeft: Point; topRight: Point } | null>(null);
+  const finalLayerBounds = useRef<{ bottomLeft: Point; topRight: Point } | null>(null);
+  const wasDraggingLayer = useRef<string | null>(null);
+  const wasResizingLayer = useRef<string | null>(null);
+  const wasResizingWithShift = useRef<boolean>(false);
 
   // Track canvas dimensions and position for efficient coordinate transformation
   const [canvasTransform, setCanvasTransform] = useState<{
@@ -254,6 +266,7 @@ export const useMouse = ({
           // Start resizing the selected layer
           setIsResizing(true);
           setActiveHandle(selectedHandleIndex);
+          wasResizingLayer.current = selectedLayer.id;
           initialLayerBounds.current = {
             bottomLeft: selectedLayer.bottomLeft.clone(),
             topRight: selectedLayer.topRight.clone()
@@ -272,6 +285,7 @@ export const useMouse = ({
           setSelectedLayer(layer);
           setIsDragging(true);
           dragStartPos.current = mousePos;
+          wasDraggingLayer.current = layer.id;
           // Store initial layer bounds for dragging
           initialDragLayerBounds.current = {
             bottomLeft: layer.bottomLeft.clone(),
@@ -318,11 +332,20 @@ export const useMouse = ({
       const originalAspectRatio = isShiftPressed ? selectedLayer.getAspectRatio().getFloat() : undefined;
       const { bottomLeft, topRight } = calculateNewBounds(mousePos, pivotPoint, activeHandle, isShiftPressed, originalAspectRatio);
 
-      // Always use direct coordinate mutation (no Layer.resize to avoid pivot movement)
-      selectedLayer.bottomLeft.x = bottomLeft.x;
-      selectedLayer.bottomLeft.y = bottomLeft.y;
-      selectedLayer.topRight.x = topRight.x;
-      selectedLayer.topRight.y = topRight.y;
+      // Store final bounds for end callback
+      finalLayerBounds.current = { bottomLeft, topRight };
+      wasResizingWithShift.current = isShiftPressed;
+      
+      // Update layer positions through callback if provided, otherwise directly mutate
+      if (onLayerResize) {
+        onLayerResize(selectedLayer.id, bottomLeft, topRight, isShiftPressed);
+      } else {
+        // Fallback to direct coordinate mutation for backward compatibility
+        selectedLayer.bottomLeft.x = bottomLeft.x;
+        selectedLayer.bottomLeft.y = bottomLeft.y;
+        selectedLayer.topRight.x = topRight.x;
+        selectedLayer.topRight.y = topRight.y;
+      }
     } else if (isDragging && selectedLayer && mouseMode === 'move') {
       if (dragStartPos.current && initialDragLayerBounds.current) {
         // Calculate offset from drag start
@@ -339,19 +362,36 @@ export const useMouse = ({
           initialDragLayerBounds.current.topRight.y + offsetY
         );
         
-        // Directly update the layer position without creating new objects
-        selectedLayer.bottomLeft.x = newBottomLeft.x;
-        selectedLayer.bottomLeft.y = newBottomLeft.y;
-        selectedLayer.topRight.x = newTopRight.x;
-        selectedLayer.topRight.y = newTopRight.y;
+        // Store final bounds for end callback
+        finalLayerBounds.current = { bottomLeft: newBottomLeft, topRight: newTopRight };
+        
+        // Update layer position through callback if provided, otherwise directly mutate
+        if (onLayerMove) {
+          onLayerMove(selectedLayer.id, newBottomLeft, newTopRight);
+        } else {
+          // Fallback to direct coordinate mutation for backward compatibility
+          selectedLayer.bottomLeft.x = newBottomLeft.x;
+          selectedLayer.bottomLeft.y = newBottomLeft.y;
+          selectedLayer.topRight.x = newTopRight.x;
+          selectedLayer.topRight.y = newTopRight.y;
+        }
       }
     }
 
-  }, [isDragging, isResizing, selectedLayer, activeHandle, mouseMode, canvasRef, getMousePositionFromEvent, isShiftPressed]);
+  }, [isDragging, isResizing, selectedLayer, activeHandle, mouseMode, canvasRef, getMousePositionFromEvent, isShiftPressed, onLayerMove, onLayerResize]);
 
   const handleMouseUp = useCallback((event: MouseEvent) => {
     // Prevent default browser behavior
     event.preventDefault();
+    
+    // Call end callbacks if we were dragging or resizing
+    if (wasDraggingLayer.current && finalLayerBounds.current && onLayerMoveEnd) {
+      onLayerMoveEnd(wasDraggingLayer.current, finalLayerBounds.current.bottomLeft, finalLayerBounds.current.topRight);
+    }
+    
+    if (wasResizingLayer.current && finalLayerBounds.current && onLayerResizeEnd) {
+      onLayerResizeEnd(wasResizingLayer.current, finalLayerBounds.current.bottomLeft, finalLayerBounds.current.topRight, wasResizingWithShift.current);
+    }
     
     setIsDragging(false);
     setIsResizing(false);
@@ -360,7 +400,11 @@ export const useMouse = ({
     dragStartPos.current = null;
     initialLayerBounds.current = null;
     initialDragLayerBounds.current = null;
-  }, []);
+    finalLayerBounds.current = null;
+    wasDraggingLayer.current = null;
+    wasResizingLayer.current = null;
+    wasResizingWithShift.current = false;
+  }, [onLayerMoveEnd, onLayerResizeEnd]);
 
   // Handle keyboard events for shift key
   const handleKeyDown = useCallback((event: KeyboardEvent) => {

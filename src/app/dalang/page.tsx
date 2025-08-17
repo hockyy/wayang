@@ -29,6 +29,8 @@ export default function DalangPage() {
     setActiveCanvas,
     addLayerToCanvas,
     removeLayerFromCanvas,
+    updateLayer,
+    resizeLayer,
     moveLayerUp,
     moveLayerDown,
     getTopLayerAt,
@@ -45,6 +47,55 @@ export default function DalangPage() {
     return null;
   }, [activeCanvasId, getTopLayerAt]);
 
+  // Callback for layer movement during dragging (using absolute positioning)
+  const handleLayerMove = useCallback((layerId: string, newBottomLeft: Point, newTopRight: Point) => {
+    if (activeCanvasId && activeCanvas) {
+      // Find the layer and update it directly for immediate visual feedback
+      const layer = activeCanvas.layers.find(l => l.id === layerId);
+      if (layer) {
+        // Update the layer position directly for immediate visual feedback
+        layer.bottomLeft.x = newBottomLeft.x;
+        layer.bottomLeft.y = newBottomLeft.y;
+        layer.topRight.x = newTopRight.x;
+        layer.topRight.y = newTopRight.y;
+        
+        // Note: We'll sync to collaborative system on mouse up instead
+        // to avoid performance issues during dragging
+      }
+    }
+  }, [activeCanvasId, activeCanvas]);
+
+  // Callback for layer resizing during dragging
+  const handleLayerResize = useCallback((layerId: string, newBottomLeft: Point, newTopRight: Point) => {
+    if (activeCanvasId && activeCanvas) {
+      const layer = activeCanvas.layers.find(l => l.id === layerId);
+      if (layer) {
+        // Update the layer position directly for immediate visual feedback
+        layer.bottomLeft.x = newBottomLeft.x;
+        layer.bottomLeft.y = newBottomLeft.y;
+        layer.topRight.x = newTopRight.x;
+        layer.topRight.y = newTopRight.y;
+      }
+    }
+  }, [activeCanvasId, activeCanvas]);
+
+  // Callback for when layer movement ends (sync to collaborative system)
+  const handleLayerMoveEnd = useCallback((layerId: string, newBottomLeft: Point, newTopRight: Point) => {
+    if (activeCanvasId) {
+      updateLayer(activeCanvasId, layerId, {
+        bottomLeft: newBottomLeft,
+        topRight: newTopRight
+      });
+    }
+  }, [activeCanvasId, updateLayer]);
+
+  // Callback for when layer resizing ends (sync to collaborative system)
+  const handleLayerResizeEnd = useCallback((layerId: string, newBottomLeft: Point, newTopRight: Point, maintainAspectRatio: boolean) => {
+    if (activeCanvasId) {
+      resizeLayer(activeCanvasId, layerId, newBottomLeft, newTopRight, maintainAspectRatio);
+    }
+  }, [activeCanvasId, resizeLayer]);
+
   const {
     mouseMode,
     setMouseMode,
@@ -59,6 +110,10 @@ export default function DalangPage() {
     canvasRef,
     getTopLayerAt: handleGetTopLayerAt,
     mode: 'move',
+    onLayerMove: handleLayerMove,
+    onLayerResize: handleLayerResize,
+    onLayerMoveEnd: handleLayerMoveEnd,
+    onLayerResizeEnd: handleLayerResizeEnd,
   });
 
   const handleImageAdded = useCallback((imageLayer: ImageLayer) => {
@@ -69,7 +124,6 @@ export default function DalangPage() {
 
   const { uploadImage, isUploading, uploadError } = useImageUpload({
     onImageAdded: handleImageAdded,
-    mode,
   });
 
   // Sync selectedLayer with the updated layer from canvas state
