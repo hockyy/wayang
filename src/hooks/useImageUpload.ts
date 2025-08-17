@@ -53,7 +53,9 @@ export const useImageUpload = ({ onImageAdded }: UseImageUploadProps = {}): UseI
               Date.now(), // Use timestamp as layer order
               img.naturalWidth, // Keep original dimensions for aspect ratio
               img.naturalHeight,
-              objectUrl
+              objectUrl,
+              file.type, // mimeType
+              file.type === 'image/gif' // isAnimated
             );
             
 

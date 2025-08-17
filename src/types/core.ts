@@ -197,6 +197,8 @@ export class Layer {
 
 export class ImageLayer extends Layer {
   public srcPath: string;
+  public mimeType?: string;
+  public isAnimated: boolean;
 
   constructor(
     bottomLeft: Point,
@@ -204,10 +206,14 @@ export class ImageLayer extends Layer {
     layerOrder: number,
     oriWidth: number,
     oriHeight: number,
-    srcPath: string
+    srcPath: string,
+    mimeType?: string,
+    isAnimated: boolean = false
   ) {
     super(bottomLeft, topRight, layerOrder, oriWidth, oriHeight);
     this.srcPath = srcPath;
+    this.mimeType = mimeType;
+    this.isAnimated = isAnimated;
   }
 }
 
