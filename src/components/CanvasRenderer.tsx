@@ -19,7 +19,6 @@ interface GIFFrame {
 
 interface GIFData {
   frames: GIFFrame[];
-  startTime: number;
 }
 
 interface CanvasRendererProps {
@@ -118,8 +117,7 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
     const gifData = gifCache.current.get(srcPath);
     if (!gifData || !gifData.frames.length) return null;
     
-    const currentTime = Date.now();
-    const elapsed = currentTime - gifData.startTime;
+    const elapsed = Date.now(); 
     
     // Calculate which frame should be showing
     let totalDelay = 0;
@@ -243,7 +241,6 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
             const frames = await loadGIF(layer.srcPath);
             gifData = {
               frames,
-              startTime: Date.now()
             };
             gifCache.current.set(layer.srcPath, gifData);
           }
@@ -312,7 +309,6 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
             const frames = await loadGIF(canvas.bg.imageSrc);
             gifData = {
               frames,
-              startTime: Date.now()
             };
             gifCache.current.set(canvas.bg.imageSrc, gifData);
           }

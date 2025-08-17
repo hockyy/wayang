@@ -395,15 +395,11 @@ export const useMouse = ({
     };
   }, [handleMouseDown, handleMouseMove, handleMouseUp, handleKeyDown, handleKeyUp, canvasRef]);
 
-  const handleSetSelectedLayer = useCallback((layer: Layer | null) => {
-    setSelectedLayer(layer);
-  }, []);
-
   return {
     mouseMode,
     setMouseMode,
     selectedLayer,
-    setSelectedLayer: handleSetSelectedLayer,
+    setSelectedLayer,
     isDragging,
     isResizing,
     mousePosition,

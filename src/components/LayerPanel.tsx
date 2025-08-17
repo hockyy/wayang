@@ -6,15 +6,15 @@ import { Layer, ImageLayer } from '@/types/core';
 interface LayerPanelProps {
   layers: Layer[];
   selectedLayer: Layer | null;
-  onLayerSelect: (layer: Layer | null) => void;
   onLayerDelete: (layerId: string) => void;
+  onLayerSelect: (layer: Layer | null) => void;
 }
 
 export const LayerPanel: React.FC<LayerPanelProps> = ({
   layers,
   selectedLayer,
-  onLayerSelect,
   onLayerDelete,
+  onLayerSelect,
 }) => {
   const getLayerName = useCallback((layer: Layer): string => {
     if (layer instanceof ImageLayer) {
@@ -36,17 +36,23 @@ export const LayerPanel: React.FC<LayerPanelProps> = ({
     return [...layers].sort((a, b) => b.layerOrder - a.layerOrder);
   }, [layers]);
 
-  const handleLayerClick = useCallback((layer: Layer) => {
-    onLayerSelect(layer);
-  }, [onLayerSelect]);
-
   const handleLayerDelete = useCallback((e: React.MouseEvent, layerId: string) => {
     e.stopPropagation();
     onLayerDelete(layerId);
   }, [onLayerDelete]);
 
+  const handleLayerClick = useCallback((layer: Layer) => {
+  console.log('LayerPanel: handleLayerClick', layer);
+    if(onLayerSelect) {
+      console.log('LayerPanel: handleLayerClick', layer);
+      onLayerSelect(layer);
+    }
+  }, [onLayerSelect]);
+
   const handleDeselectAll = useCallback(() => {
-    onLayerSelect(null);
+    if (onLayerSelect) {
+      onLayerSelect(null);
+    }
   }, [onLayerSelect]);
 
   return (

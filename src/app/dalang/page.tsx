@@ -227,6 +227,7 @@ export default function DalangPage() {
               layers={activeCanvasLayers}
               selectedLayer={selectedLayer}
               onLayerDelete={handleLayerDelete}
+              onLayerSelect={setSelectedLayer}
             />
           </div>
         </div>
