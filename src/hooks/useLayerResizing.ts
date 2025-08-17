@@ -79,7 +79,7 @@ export const useLayerResizing = ({
       initialBounds,
       currentBounds: null,
       maintainAspectRatio: isShiftPressed,
-      originalAspectRatio: isShiftPressed ? layer.getAspectRatio().getFloat() : null,
+      originalAspectRatio: layer.getAspectRatio().getFloat()
     };
   }, []);
 
