@@ -8,6 +8,7 @@ import * as Y from 'yjs';
 export interface CollaborationConfig {
   roomId: string;
   websocketUrl?: string;
+  enableWebSocket?: boolean;
 }
 
 export class CollaborationProvider {
@@ -16,10 +17,12 @@ export class CollaborationProvider {
   private indexeddbProvider: IndexeddbPersistence | null = null;
   private roomId: string;
   private websocketUrl: string;
+  private enableWebSocket: boolean;
 
   constructor(config: CollaborationConfig) {
     this.roomId = config.roomId;
-    this.websocketUrl = config.websocketUrl || 'wss://demos.yjs.dev';
+    this.websocketUrl = config.websocketUrl || 'ws://localhost:1234';
+    this.enableWebSocket = config.enableWebSocket ?? true;
     this.doc = new Y.Doc();
   }
 
@@ -32,38 +35,44 @@ export class CollaborationProvider {
       await this.indexeddbProvider.whenSynced;
       console.log('loaded data from indexed db');
 
-      // Set up WebSocket provider for server-based real-time collaboration
-      this.websocketProvider = new WebsocketProvider(
-        this.websocketUrl,
-        this.roomId,
-        this.doc,
-        {
-          connect: true,
-          // Offline-first: continue working even without server
-          disableBc: false,
-        }
-      );
-
-      // Wait for connection or timeout
-      return new Promise((resolve) => {
-        const timeout = setTimeout(() => {
-          console.warn('WebSocket connection timeout, continuing offline');
-          resolve(); // Continue offline
-        }, 2000);
-
-        this.websocketProvider!.on('status', (event: { status: string }) => {
-          if (event.status === 'connected') {
-            clearTimeout(timeout);
-            resolve();
+      // Only set up WebSocket if enabled
+      if (this.enableWebSocket) {
+        // Set up WebSocket provider for server-based real-time collaboration
+        this.websocketProvider = new WebsocketProvider(
+          this.websocketUrl,
+          this.roomId,
+          this.doc,
+          {
+            connect: true,
+            // Offline-first: continue working even without server
+            disableBc: false,
           }
-        });
+        );
 
-        this.websocketProvider!.on('connection-error', () => {
-          clearTimeout(timeout);
-          console.warn('WebSocket connection failed, continuing offline');
-          resolve(); // Continue offline
+        // Wait for connection or timeout
+        return new Promise((resolve) => {
+          const timeout = setTimeout(() => {
+            console.warn('WebSocket connection timeout, continuing offline');
+            resolve(); // Continue offline
+          }, 2000);
+
+          this.websocketProvider!.on('status', (event: { status: string }) => {
+            if (event.status === 'connected') {
+              clearTimeout(timeout);
+              console.log('WebSocket connected successfully');
+              resolve();
+            }
+          });
+
+          this.websocketProvider!.on('connection-error', () => {
+            clearTimeout(timeout);
+            console.warn('WebSocket connection failed, continuing offline');
+            resolve(); // Continue offline
+          });
         });
-      });
+      } else {
+        console.log('WebSocket disabled, working in local mode');
+      }
     } catch (error) {
       console.warn('Failed to connect to collaboration server, continuing offline:', error);
       // Continue without collaboration
@@ -94,7 +103,16 @@ export class CollaborationProvider {
   }
 
   isConnected(): boolean {
+    // If WebSocket is disabled (local mode), consider it "connected" since we're working locally
+    if (!this.enableWebSocket) {
+      return true;
+    }
+    // If WebSocket is enabled, check actual connection status
     return this.websocketProvider?.wsconnected || false;
+  }
+
+  getConnectionMode(): 'local' | 'online' {
+    return this.enableWebSocket ? 'online' : 'local';
   }
 
   // Subscribe to changes
@@ -110,12 +128,16 @@ export class CollaborationProvider {
 // Global collaboration instances
 const collaborationInstances = new Map<string, CollaborationProvider>();
 
-export function getCollaborationProvider(roomId: string): CollaborationProvider {
-  if (!collaborationInstances.has(roomId)) {
-    const provider = new CollaborationProvider({ roomId });
-    collaborationInstances.set(roomId, provider);
+export function getCollaborationProvider(roomId: string, config?: Partial<CollaborationConfig>): CollaborationProvider {
+  const key = `${roomId}-${config?.enableWebSocket ?? true}`;
+  if (!collaborationInstances.has(key)) {
+    const provider = new CollaborationProvider({ 
+      roomId, 
+      ...config 
+    });
+    collaborationInstances.set(key, provider);
   }
-  return collaborationInstances.get(roomId)!;
+  return collaborationInstances.get(key)!;
 }
 
 export function removeCollaborationProvider(roomId: string): void {
