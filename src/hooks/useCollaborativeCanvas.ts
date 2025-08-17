@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Canvas, Layer, Point, BackgroundConfig, ImageLayer } from '@/types/core';
-import { wayangDB, CanvasData, LayerData } from '@/lib/database';
 import { getCollaborationProvider, CollaborationProvider } from '@/lib/collaboration';
 
 export interface UseCollaborativeCanvasProps {
@@ -29,20 +28,21 @@ export interface UseCollaborativeCanvasReturn {
   getTopLayerAt: (canvasId: string, point: Point) => Layer | null;
 }
 
-function canvasToData(canvas: Canvas): CanvasData {
+// New Yjs-specific canvas metadata (without layers)
+function canvasToYjsMetadata(canvas: Canvas) {
   return {
     id: canvas.id,
     width: canvas.width,
     height: canvas.height,
     background: canvas.bg,
-    layers: canvas.layers.map(layerToData),
-    createdAt: new Date(),
-    updatedAt: new Date(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 }
 
-function layerToData(layer: Layer): LayerData {
-  const data: LayerData = {
+// Convert layer to Yjs-compatible format (store only src path, no blob URLs)
+function layerToYjsData(layer: Layer) {
+  const data = {
     id: layer.id,
     type: layer.constructor.name,
     bottomLeft: { x: layer.bottomLeft.x, y: layer.bottomLeft.y },
@@ -52,24 +52,34 @@ function layerToData(layer: Layer): LayerData {
     oriHeight: layer.oriHeight,
   };
 
-  // Add specific properties for different layer types
+  // For ImageLayer, store only the src path (no blob URLs)
   if (layer instanceof ImageLayer) {
-    data.srcPath = layer.srcPath;
-    data.mimeType = layer.mimeType;
-    data.isAnimated = layer.isAnimated;
+    return {
+      ...data,
+      srcPath: layer.srcPath, // Local file path only
+      mimeType: layer.mimeType,
+      isAnimated: layer.isAnimated,
+    };
   }
 
   return data;
 }
 
-function dataToCanvas(data: CanvasData): Canvas {
-  const canvas = new Canvas(data.width, data.height, data.background);
-  canvas.id = data.id;
-  canvas.layers = data.layers.map(dataToLayer);
-  return canvas;
-}
+// Removed dataToCanvas and dataToLayer - no longer needed for local database
 
-function dataToLayer(data: LayerData): Layer {
+// Convert Yjs data back to Layer
+function yjsDataToLayer(data: {
+  id: string;
+  type: string;
+  bottomLeft: { x: number; y: number };
+  topRight: { x: number; y: number };
+  layerOrder: number;
+  oriWidth: number;
+  oriHeight: number;
+  srcPath?: string;
+  mimeType?: string;
+  isAnimated?: boolean;
+}): Layer {
   // Create appropriate layer type based on stored type
   if (data.type === 'ImageLayer') {
     return new ImageLayer(
@@ -110,17 +120,10 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
     return activeCanvas?.layers || [];
   }, [activeCanvas]);
 
-  // Initialize database and collaboration
+  // Initialize collaboration only - no local database
   useEffect(() => {
     const init = async () => {
       try {
-        // Initialize database
-        await wayangDB.init();
-        
-        // Load existing canvases from database
-        const savedCanvases = await wayangDB.getAllCanvases();
-        const loadedCanvases = savedCanvases.map(dataToCanvas);
-        setCanvases(loadedCanvases);
 
         // Initialize collaboration
         const provider = getCollaborationProvider(roomId);
@@ -129,22 +132,164 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
         await provider.connect();
         setIsConnected(provider.isConnected());
 
-        // Set up shared state
-        const sharedCanvases = provider.getSharedMap('canvases');
+        // Set up shared state using new Yjs structure
+        // getMap('canvas') -> maps canvasId to canvas metadata
+        const canvasMap = provider.getSharedMap('canvas');
         
-        // Sync local canvases to shared state
-        loadedCanvases.forEach(canvas => {
-          if (!sharedCanvases.has(canvas.id)) {
-            sharedCanvases.set(canvas.id, canvasToData(canvas));
+        // Load existing canvases from Yjs (no local database)
+        const loadedCanvases: Canvas[] = [];
+        const canvasLayersMap = provider.getSharedMap('canvas-layers');
+        
+        canvasMap.forEach((canvasMetadata: unknown, canvasId: string) => {
+          if (canvasMetadata && typeof canvasMetadata === 'object') {
+            const metadata = canvasMetadata as {
+              id: string;
+              width: number;
+              height: number;
+              background: BackgroundConfig;
+              createdAt: string;
+              updatedAt: string;
+            };
+            
+            // Reconstruct canvas from Yjs metadata
+            const canvas = new Canvas(
+              metadata.width,
+              metadata.height,
+              metadata.background
+            );
+            canvas.id = canvasId;
+            
+            // Load layers from canvas->layers mapping and individual Yjs arrays
+            const layerIds = canvasLayersMap.get(canvasId) as string[] || [];
+            const layers: Layer[] = [];
+            
+            layerIds.forEach(layerId => {
+              const layerArray = provider.getSharedArray(layerId);
+              if (layerArray.length > 0) {
+                const layerYjsData = layerArray.get(0) as {
+                  id: string;
+                  type: string;
+                  bottomLeft: { x: number; y: number };
+                  topRight: { x: number; y: number };
+                  layerOrder: number;
+                  oriWidth: number;
+                  oriHeight: number;
+                  srcPath?: string;
+                  mimeType?: string;
+                  isAnimated?: boolean;
+                };
+                layers.push(yjsDataToLayer(layerYjsData));
+              }
+            });
+            
+            canvas.layers = layers.sort((a, b) => a.layerOrder - b.layerOrder);
+            loadedCanvases.push(canvas);
           }
         });
+        
+        setCanvases(loadedCanvases);
 
-        // Listen for changes from other tabs
-        sharedCanvases.observe(() => {
+        // Listen for changes to canvas-layers mapping
+        canvasLayersMap.observe(() => {
+          console.log('Canvas-layers mapping changed, reloading canvases...');
+          // Reload all canvases when layer mapping changes
           const updatedCanvases: Canvas[] = [];
-          sharedCanvases.forEach((canvasData: unknown) => {
-            if (canvasData && typeof canvasData === 'object') {
-              updatedCanvases.push(dataToCanvas(canvasData as CanvasData));
+          
+          canvasMap.forEach((canvasMetadata: unknown, canvasId: string) => {
+            if (canvasMetadata && typeof canvasMetadata === 'object') {
+              const metadata = canvasMetadata as {
+                id: string;
+                width: number;
+                height: number;
+                background: BackgroundConfig;
+                createdAt: string;
+                updatedAt: string;
+              };
+              
+              const canvas = new Canvas(metadata.width, metadata.height, metadata.background);
+              canvas.id = canvasId;
+              
+              // Load layers from updated mapping
+              const layerIds = canvasLayersMap.get(canvasId) as string[] || [];
+              const layers: Layer[] = [];
+              
+              layerIds.forEach(layerId => {
+                const layerArray = provider.getSharedArray(layerId);
+                if (layerArray.length > 0) {
+                  const layerYjsData = layerArray.get(0) as {
+                    id: string;
+                    type: string;
+                    bottomLeft: { x: number; y: number };
+                    topRight: { x: number; y: number };
+                    layerOrder: number;
+                    oriWidth: number;
+                    oriHeight: number;
+                    srcPath?: string;
+                    mimeType?: string;
+                    isAnimated?: boolean;
+                  };
+                  layers.push(yjsDataToLayer(layerYjsData));
+                }
+              });
+              
+              canvas.layers = layers.sort((a, b) => a.layerOrder - b.layerOrder);
+              updatedCanvases.push(canvas);
+            }
+          });
+          
+          setCanvases(updatedCanvases);
+        });
+
+        // Listen for changes from other clients
+        canvasMap.observe(() => {
+          const updatedCanvases: Canvas[] = [];
+          canvasMap.forEach((canvasMetadata: unknown, canvasId: string) => {
+            if (canvasMetadata && typeof canvasMetadata === 'object') {
+              const metadata = canvasMetadata as {
+                id: string;
+                width: number;
+                height: number;
+                background: BackgroundConfig;
+                createdAt: string;
+                updatedAt: string;
+              };
+              // Reconstruct canvas from metadata
+              const canvas = new Canvas(
+                metadata.width,
+                metadata.height,
+                metadata.background
+              );
+              canvas.id = canvasId;
+              
+              // Load layers from individual Yjs arrays
+              // We'll need to discover layer IDs from the current canvas state
+              const currentCanvas = canvases.find(c => c.id === canvasId);
+              const layers: Layer[] = [];
+              
+              if (currentCanvas) {
+                // Load existing layers from Yjs
+                currentCanvas.layers.forEach(existingLayer => {
+                  const layerArray = provider.getSharedArray(existingLayer.id);
+                  if (layerArray.length > 0) {
+                    const layerYjsData = layerArray.get(0) as {
+                      id: string;
+                      type: string;
+                      bottomLeft: { x: number; y: number };
+                      topRight: { x: number; y: number };
+                      layerOrder: number;
+                      oriWidth: number;
+                      oriHeight: number;
+                      srcPath?: string;
+                      mimeType?: string;
+                      isAnimated?: boolean;
+                    };
+                    layers.push(yjsDataToLayer(layerYjsData));
+                  }
+                });
+              }
+              
+              canvas.layers = layers.sort((a, b) => a.layerOrder - b.layerOrder);
+              updatedCanvases.push(canvas);
             }
           });
           setCanvases(updatedCanvases);
@@ -156,22 +301,61 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
     };
 
     init();
-  }, [roomId]);
+  }, [roomId]); // canvases is intentionally excluded to avoid infinite re-initialization
 
   const syncCanvasToCollaboration = useCallback((canvas: Canvas) => {
     if (collaborationProvider) {
-      const sharedCanvases = collaborationProvider.getSharedMap('canvases');
-      sharedCanvases.set(canvas.id, canvasToData(canvas));
+      // Update canvas metadata in the main map
+      const canvasMap = collaborationProvider.getSharedMap('canvas');
+      canvasMap.set(canvas.id, canvasToYjsMetadata(canvas));
+      
+      // Update canvas -> layerIds mapping
+      const canvasLayersMap = collaborationProvider.getSharedMap('canvas-layers');
+      const layerIds = canvas.layers.map(layer => layer.id);
+      canvasLayersMap.set(canvas.id, layerIds);
+      
+      // Update each layer in its individual array
+      canvas.layers.forEach(layer => {
+        const layerArray = collaborationProvider.getSharedArray(layer.id);
+        layerArray.delete(0, layerArray.length); // Clear existing
+        layerArray.push([layerToYjsData(layer)]);
+      });
     }
   }, [collaborationProvider]);
 
-  const syncCanvasToDatabase = useCallback(async (canvas: Canvas) => {
-    try {
-      await wayangDB.saveCanvas(canvasToData(canvas));
-    } catch (error) {
-      console.error('Failed to save canvas to database:', error);
+  // Helper functions to work directly with Yjs layer arrays
+  const updateLayerInYjs = useCallback((layerId: string, layer: Layer) => {
+    if (collaborationProvider) {
+      const layerArray = collaborationProvider.getSharedArray(layerId);
+      layerArray.delete(0, layerArray.length); // Clear existing
+      layerArray.push([layerToYjsData(layer)]);
     }
-  }, []);
+  }, [collaborationProvider]);
+
+  const removeLayerFromYjs = useCallback((layerId: string) => {
+    if (collaborationProvider) {
+      const layerArray = collaborationProvider.getSharedArray(layerId);
+      layerArray.delete(0, layerArray.length); // Clear the layer array
+    }
+  }, [collaborationProvider]);
+
+  const addLayerToCanvasInYjs = useCallback((canvasId: string, layerId: string) => {
+    if (collaborationProvider) {
+      const canvasLayersMap = collaborationProvider.getSharedMap('canvas-layers');
+      const currentLayerIds = canvasLayersMap.get(canvasId) as string[] || [];
+      canvasLayersMap.set(canvasId, [...currentLayerIds, layerId]);
+    }
+  }, [collaborationProvider]);
+
+  const removeLayerFromCanvasInYjs = useCallback((canvasId: string, layerId: string) => {
+    if (collaborationProvider) {
+      const canvasLayersMap = collaborationProvider.getSharedMap('canvas-layers');
+      const currentLayerIds = canvasLayersMap.get(canvasId) as string[] || [];
+      canvasLayersMap.set(canvasId, currentLayerIds.filter(id => id !== layerId));
+    }
+  }, [collaborationProvider]);
+
+  // Removed syncCanvasToDatabase - using Yjs persistence only
 
   const createCanvas = useCallback((width: number, height: number, bg: BackgroundConfig): Canvas => {
     const newCanvas = new Canvas(width, height, bg);
@@ -179,7 +363,6 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
     setCanvases(prev => {
       const updated = [...prev, newCanvas];
       syncCanvasToCollaboration(newCanvas);
-      syncCanvasToDatabase(newCanvas);
       return updated;
     });
     
@@ -189,7 +372,7 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
     }
     
     return newCanvas;
-  }, [activeCanvasId, syncCanvasToCollaboration, syncCanvasToDatabase]);
+  }, [activeCanvasId, syncCanvasToCollaboration]);
 
   const createCanvasFromImage = useCallback(async (file: File): Promise<Canvas> => {
     return new Promise((resolve, reject) => {
@@ -216,7 +399,6 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
           setCanvases(prev => {
             const updated = [...prev, newCanvas];
             syncCanvasToCollaboration(newCanvas);
-            syncCanvasToDatabase(newCanvas);
             return updated;
           });
           
@@ -238,20 +420,26 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
 
       img.src = objectUrl;
     });
-  }, [activeCanvasId, syncCanvasToCollaboration, syncCanvasToDatabase]);
+  }, [activeCanvasId, syncCanvasToCollaboration]);
 
   const deleteCanvas = useCallback((canvasId: string) => {
     setCanvases(prev => {
+      const canvasToDelete = prev.find(canvas => canvas.id === canvasId);
       const updatedCanvases = prev.filter(canvas => canvas.id !== canvasId);
       
       // Remove from collaboration
-      if (collaborationProvider) {
-        const sharedCanvases = collaborationProvider.getSharedMap('canvases');
-        sharedCanvases.delete(canvasId);
+      if (collaborationProvider && canvasToDelete) {
+        const canvasMap = collaborationProvider.getSharedMap('canvas');
+        canvasMap.delete(canvasId);
+        
+        // Remove all layer arrays for this canvas
+        canvasToDelete.layers.forEach(layer => {
+          const layerArray = collaborationProvider.getSharedArray(layer.id);
+          layerArray.delete(0, layerArray.length);
+        });
       }
       
-      // Remove from database
-      wayangDB.deleteCanvas(canvasId).catch(console.error);
+      // No local database to clean up - Yjs handles persistence
       
       if (activeCanvasId === canvasId) {
         if (updatedCanvases.length > 0) {
@@ -269,147 +457,110 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
     setActiveCanvasId(canvasId);
   }, []);
 
-  const updateCanvasInState = useCallback((updatedCanvas: Canvas) => {
-    setCanvases(prev => {
-      const updated = prev.map(canvas => 
-        canvas.id === updatedCanvas.id ? updatedCanvas : canvas
-      );
-      syncCanvasToCollaboration(updatedCanvas);
-      syncCanvasToDatabase(updatedCanvas);
-      return updated;
-    });
-  }, [syncCanvasToCollaboration, syncCanvasToDatabase]);
+  // Removed updateCanvasInState - now using direct Yjs updates
 
   const addLayerToCanvas = useCallback((canvasId: string, layer: Layer) => {
-    setCanvases(prev => prev.map(canvas => {
-      if (canvas.id === canvasId) {
-        const updatedCanvas = new Canvas(canvas.width, canvas.height, canvas.bg);
-        updatedCanvas.id = canvas.id;
-        updatedCanvas.layers = [...canvas.layers, layer];
-        updatedCanvas.layers.sort((a, b) => a.layerOrder - b.layerOrder);
-        updateCanvasInState(updatedCanvas);
-        return updatedCanvas;
-      }
-      return canvas;
-    }));
-  }, [updateCanvasInState]);
+    console.log('addLayerToCanvas inside', canvasId, layer);
+    
+    // Only update Yjs - local state will be updated by observers
+    updateLayerInYjs(layer.id, layer);
+    addLayerToCanvasInYjs(canvasId, layer.id);
+  }, [updateLayerInYjs, addLayerToCanvasInYjs]);
 
   const removeLayerFromCanvas = useCallback((canvasId: string, layerId: string) => {
-    setCanvases(prev => prev.map(canvas => {
-      if (canvas.id === canvasId) {
-        const updatedCanvas = new Canvas(canvas.width, canvas.height, canvas.bg);
-        updatedCanvas.id = canvas.id;
-        updatedCanvas.layers = canvas.layers.filter(layer => layer.id !== layerId);
-        updateCanvasInState(updatedCanvas);
-        return updatedCanvas;
-      }
-      return canvas;
-    }));
-  }, [updateCanvasInState]);
+    // Only update Yjs - local state will be updated by observers
+    removeLayerFromYjs(layerId);
+    removeLayerFromCanvasInYjs(canvasId, layerId);
+  }, [removeLayerFromYjs, removeLayerFromCanvasInYjs]);
 
   const updateLayer = useCallback((canvasId: string, layerId: string, updates: Partial<Layer>) => {
-    setCanvases(prev => prev.map(canvas => {
-      if (canvas.id === canvasId) {
-        const updatedCanvas = new Canvas(canvas.width, canvas.height, canvas.bg);
-        updatedCanvas.id = canvas.id;
-        updatedCanvas.layers = canvas.layers.map((layer: Layer) => {
-          if (layer.id === layerId) {
-            return Object.assign(Object.create(Object.getPrototypeOf(layer)), layer, updates);
-          }
-          return layer;
-        });
-        updateCanvasInState(updatedCanvas);
-        return updatedCanvas;
-      }
-      return canvas;
-    }));
-  }, [updateCanvasInState]);
+    // Only operate on the active canvas
+    if (!activeCanvas || activeCanvas.id !== canvasId) return;
+    
+    const layer = activeCanvas.layers.find(l => l.id === layerId);
+    if (!layer) return;
+    
+    // Create updated layer
+    const updatedLayer = Object.assign(Object.create(Object.getPrototypeOf(layer)), layer, updates);
+    
+    // Only update Yjs - local state will be updated by observers
+    updateLayerInYjs(layerId, updatedLayer);
+  }, [activeCanvas, updateLayerInYjs]);
 
   const moveLayer = useCallback((canvasId: string, layerId: string, offsetX: number, offsetY: number) => {
-    setCanvases(prev => prev.map(canvas => {
-      if (canvas.id === canvasId) {
-        const updatedCanvas = new Canvas(canvas.width, canvas.height, canvas.bg);
-        updatedCanvas.id = canvas.id;
-        updatedCanvas.layers = canvas.layers.map((layer: Layer) => {
-          if (layer.id === layerId) {
-            const movedLayer = Object.assign(Object.create(Object.getPrototypeOf(layer)), layer);
-            movedLayer.move(offsetX, offsetY);
-            return movedLayer;
-          }
-          return layer;
-        });
-        updateCanvasInState(updatedCanvas);
-        return updatedCanvas;
-      }
-      return canvas;
-    }));
-  }, [updateCanvasInState]);
+    // Only operate on the active canvas
+    if (!activeCanvas || activeCanvas.id !== canvasId) return;
+    
+    const layer = activeCanvas.layers.find(l => l.id === layerId);
+    if (!layer) return;
+    
+    // Create moved layer
+    const movedLayer = Object.assign(Object.create(Object.getPrototypeOf(layer)), layer);
+    movedLayer.move(offsetX, offsetY);
+    
+    // Only update Yjs - local state will be updated by observers
+    updateLayerInYjs(layerId, movedLayer);
+  }, [activeCanvas, updateLayerInYjs]);
 
   const resizeLayer = useCallback((canvasId: string, layerId: string, newBottomLeft: Point, newTopRight: Point, maintainAspectRatio: boolean) => {
-    setCanvases(prev => prev.map(canvas => {
-      if (canvas.id === canvasId) {
-        const updatedLayers = canvas.layers.map((layer: Layer) => {
-          if (layer.id === layerId) {
-            const resizedLayer = Object.assign(Object.create(Object.getPrototypeOf(layer)), layer);
-            resizedLayer.resize(newBottomLeft, newTopRight, maintainAspectRatio);
-            return resizedLayer;
-          }
-          return layer;
-        });
-        
-        const updatedCanvas = Object.assign(Object.create(Object.getPrototypeOf(canvas)), canvas);
-        updatedCanvas.layers = updatedLayers;
-        updateCanvasInState(updatedCanvas);
-        return updatedCanvas;
-      }
-      return canvas;
-    }));
-  }, [updateCanvasInState]);
+    // Only operate on the active canvas
+    if (!activeCanvas || activeCanvas.id !== canvasId) return;
+    
+    const layer = activeCanvas.layers.find(l => l.id === layerId);
+    if (!layer) return;
+    
+    // Create resized layer
+    const resizedLayer = Object.assign(Object.create(Object.getPrototypeOf(layer)), layer);
+    resizedLayer.resize(newBottomLeft, newTopRight, maintainAspectRatio);
+    
+    // Only update Yjs - local state will be updated by observers
+    updateLayerInYjs(layerId, resizedLayer);
+  }, [activeCanvas, updateLayerInYjs]);
 
   const moveLayerUp = useCallback((canvasId: string, layerId: string) => {
-    setCanvases(prev => prev.map(canvas => {
-      if (canvas.id === canvasId) {
-        const layerIndex = canvas.layers.findIndex(layer => layer.id === layerId);
-        if (layerIndex === -1 || layerIndex === canvas.layers.length - 1) return canvas;
-        
-        const updatedCanvas = new Canvas(canvas.width, canvas.height, canvas.bg);
-        updatedCanvas.id = canvas.id;
-        updatedCanvas.layers = [...canvas.layers];
-        
-        [updatedCanvas.layers[layerIndex], updatedCanvas.layers[layerIndex + 1]] = 
-        [updatedCanvas.layers[layerIndex + 1], updatedCanvas.layers[layerIndex]];
-        
-        updateCanvasInState(updatedCanvas);
-        return updatedCanvas;
-      }
-      return canvas;
-    }));
-  }, [updateCanvasInState]);
+    // Only operate on the active canvas
+    if (!activeCanvas || activeCanvas.id !== canvasId) return;
+    
+    const layerIndex = activeCanvas.layers.findIndex(layer => layer.id === layerId);
+    if (layerIndex === -1 || layerIndex === activeCanvas.layers.length - 1) return;
+    
+    // Create new layer order
+    const newLayerIds = activeCanvas.layers.map(layer => layer.id);
+    [newLayerIds[layerIndex], newLayerIds[layerIndex + 1]] = 
+    [newLayerIds[layerIndex + 1], newLayerIds[layerIndex]];
+    
+    // Only update Yjs canvas->layers mapping
+    if (collaborationProvider) {
+      const canvasLayersMap = collaborationProvider.getSharedMap('canvas-layers');
+      canvasLayersMap.set(canvasId, newLayerIds);
+    }
+  }, [activeCanvas, collaborationProvider]);
 
   const moveLayerDown = useCallback((canvasId: string, layerId: string) => {
-    setCanvases(prev => prev.map(canvas => {
-      if (canvas.id === canvasId) {
-        const layerIndex = canvas.layers.findIndex(layer => layer.id === layerId);
-        if (layerIndex === -1 || layerIndex === 0) return canvas;
-        
-        const updatedCanvas = new Canvas(canvas.width, canvas.height, canvas.bg);
-        updatedCanvas.id = canvas.id;
-        updatedCanvas.layers = [...canvas.layers];
-        
-        [updatedCanvas.layers[layerIndex], updatedCanvas.layers[layerIndex - 1]] = 
-        [updatedCanvas.layers[layerIndex - 1], updatedCanvas.layers[layerIndex]];
-        
-        updateCanvasInState(updatedCanvas);
-        return updatedCanvas;
-      }
-      return canvas;
-    }));
-  }, [updateCanvasInState]);
+    // Only operate on the active canvas
+    if (!activeCanvas || activeCanvas.id !== canvasId) return;
+    
+    const layerIndex = activeCanvas.layers.findIndex(layer => layer.id === layerId);
+    if (layerIndex === -1 || layerIndex === 0) return;
+    
+    // Create new layer order
+    const newLayerIds = activeCanvas.layers.map(layer => layer.id);
+    [newLayerIds[layerIndex], newLayerIds[layerIndex - 1]] = 
+    [newLayerIds[layerIndex - 1], newLayerIds[layerIndex]];
+    
+    // Only update Yjs canvas->layers mapping
+    if (collaborationProvider) {
+      const canvasLayersMap = collaborationProvider.getSharedMap('canvas-layers');
+      canvasLayersMap.set(canvasId, newLayerIds);
+    }
+  }, [activeCanvas, collaborationProvider]);
 
   const getTopLayerAt = useCallback((canvasId: string, point: Point): Layer | null => {
-    const canvas = canvases.find(c => c.id === canvasId);
-    return canvas ? canvas.getTopLayerAt(point) : null;
-  }, [canvases]);
+    // Only operate on the active canvas
+    if (!activeCanvas || activeCanvas.id !== canvasId) return null;
+    
+    return activeCanvas.getTopLayerAt(point);
+  }, [activeCanvas]);
 
   return {
     canvases,

@@ -1,5 +1,5 @@
-// Collaboration provider using y-websocket for real-time sync between tabs
-// This works offline by using local WebSocket connections and y-indexeddb for persistence
+// Collaboration provider using Yjs with WebRTC, WebSocket, and IndexedDB
+// This provides real-time collaboration with offline-first capabilities
 
 import { WebsocketProvider } from 'y-websocket';
 import { IndexeddbPersistence } from 'y-indexeddb';
@@ -12,27 +12,28 @@ export interface CollaborationConfig {
 
 export class CollaborationProvider {
   private doc: Y.Doc;
-  private provider: WebsocketProvider | null = null;
+  private websocketProvider: WebsocketProvider | null = null;
   private indexeddbProvider: IndexeddbPersistence | null = null;
   private roomId: string;
   private websocketUrl: string;
 
   constructor(config: CollaborationConfig) {
     this.roomId = config.roomId;
-    this.websocketUrl = config.websocketUrl || 'ws://localhost:1234';
+    this.websocketUrl = config.websocketUrl || 'wss://demos.yjs.dev';
     this.doc = new Y.Doc();
   }
 
   async connect(): Promise<void> {
     try {
-      // Set up IndexedDB persistence for offline storage
+      // Set up IndexedDB persistence for offline storage - this allows instant access to cached data
       this.indexeddbProvider = new IndexeddbPersistence(this.roomId, this.doc);
       
-      // Wait for IndexedDB to load
+      // Wait for IndexedDB to load cached data
       await this.indexeddbProvider.whenSynced;
+      console.log('loaded data from indexed db');
 
-      // Create WebSocket provider for real-time collaboration
-      this.provider = new WebsocketProvider(
+      // Set up WebSocket provider for server-based real-time collaboration
+      this.websocketProvider = new WebsocketProvider(
         this.websocketUrl,
         this.roomId,
         this.doc,
@@ -43,21 +44,21 @@ export class CollaborationProvider {
         }
       );
 
-              // Wait for connection or timeout
-        return new Promise((resolve) => {
+      // Wait for connection or timeout
+      return new Promise((resolve) => {
         const timeout = setTimeout(() => {
           console.warn('WebSocket connection timeout, continuing offline');
           resolve(); // Continue offline
         }, 2000);
 
-        this.provider!.on('status', (event: { status: string }) => {
+        this.websocketProvider!.on('status', (event: { status: string }) => {
           if (event.status === 'connected') {
             clearTimeout(timeout);
             resolve();
           }
         });
 
-        this.provider!.on('connection-error', () => {
+        this.websocketProvider!.on('connection-error', () => {
           clearTimeout(timeout);
           console.warn('WebSocket connection failed, continuing offline');
           resolve(); // Continue offline
@@ -70,9 +71,9 @@ export class CollaborationProvider {
   }
 
   disconnect(): void {
-    if (this.provider) {
-      this.provider.destroy();
-      this.provider = null;
+    if (this.websocketProvider) {
+      this.websocketProvider.destroy();
+      this.websocketProvider = null;
     }
     if (this.indexeddbProvider) {
       this.indexeddbProvider.destroy();
@@ -93,7 +94,7 @@ export class CollaborationProvider {
   }
 
   isConnected(): boolean {
-    return this.provider?.wsconnected || false;
+    return this.websocketProvider?.wsconnected || false;
   }
 
   // Subscribe to changes

@@ -28,7 +28,8 @@ export const useImageUpload = ({ onImageAdded, mode = 'local' }: UseImageUploadP
       }
 
       if (mode === 'local') {
-        // Local mode: Use file path for better performance
+        // Local mode: Use actual file path instead of blob URL
+        // Create a temporary blob URL only for getting dimensions, then use file path
         const objectUrl = URL.createObjectURL(file);
         
         // Load the image to get dimensions
@@ -49,20 +50,28 @@ export const useImageUpload = ({ onImageAdded, mode = 'local' }: UseImageUploadP
                 layerHeight = layerHeight * scale;
               }
               
+              // Get the file path (use file.name as path since it's local)
+              // In a real local environment, this would be the actual file system path
+              const filePath = file.name; // For local mode, use filename as path
+              
               const imageLayer = new ImageLayer(
                 new Point(50, 50), // Default position
                 new Point(50 + layerWidth, 50 + layerHeight),
                 Date.now(), // Use timestamp as layer order
                 img.naturalWidth, // Keep original dimensions for aspect ratio
                 img.naturalHeight,
-                objectUrl, // Use blob URL for local mode
+                filePath, // Use file path instead of blob URL for local mode
                 file.type, // mimeType
                 file.type === 'image/gif' // isAnimated
               );
               
+              // Clean up the temporary blob URL since we're using file path
+              URL.revokeObjectURL(objectUrl);
+              
               onImageAdded?.(imageLayer);
               resolve(imageLayer);
             } catch (error) {
+              URL.revokeObjectURL(objectUrl);
               reject(error);
             } finally {
               setIsUploading(false);

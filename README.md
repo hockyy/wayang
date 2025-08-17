@@ -117,7 +117,7 @@ src/
 │   ├── LayerPanel.tsx     # Layer management
 │   └── ToolPanel.tsx      # Tool selection
 ├── hooks/                 # Custom React hooks
-│   ├── useCanvas.ts       # Canvas state management
+│   ├── useCollaborativeCanvas.ts  # Canvas state management with Yjs collaboration
 │   ├── useMouse.ts        # Mouse interactions
 │   └── useImageUpload.ts  # Image handling
 └── types/                 # TypeScript definitions
@@ -161,7 +161,7 @@ class Canvas {
 ```
 
 ### Hook-Based Architecture
-- **useCanvas**: Manages canvas state, layer operations, and canvas switching
+- **useCollaborativeCanvas**: Manages canvas state, layer operations, canvas switching, and real-time collaboration via Yjs
 - **useMouse**: Handles mouse interactions, collision detection, and drag operations
 - **useImageUpload**: Manages file uploads and image layer creation
 
@@ -208,9 +208,9 @@ Named after traditional Indonesian shadow puppetry, Wayang represents:
 ### State Management
 The application uses a combination of:
 - **Local State**: Component-specific state with useState
-- **Custom Hooks**: Shared state logic with useCanvas, useMouse
+- **Custom Hooks**: Shared state logic with useCollaborativeCanvas, useMouse
 - **Prop Drilling**: Intentional for explicit data flow
-- **No Global State**: Keeps components modular and testable
+- **Yjs Collaboration**: Real-time state sync with IndexedDB persistence
 
 ## 🚀 Deployment
 
