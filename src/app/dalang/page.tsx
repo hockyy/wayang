@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useRef } from 'react';
-import { useCanvas } from '@/hooks/useCanvas';
+import { useCollaborativeCanvas } from '@/hooks/useCollaborativeCanvas';
 import { useMouse } from '@/hooks/useMouse';
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { CanvasRenderer } from '@/components/CanvasRenderer';
@@ -21,14 +21,18 @@ export default function DalangPage() {
     activeCanvas,
     activeCanvasId,
     activeCanvasLayers,
+    isConnected,
+    mode,
     createCanvas,
     createCanvasFromImage,
     deleteCanvas,
     setActiveCanvas,
     addLayerToCanvas,
     removeLayerFromCanvas,
+    moveLayerUp,
+    moveLayerDown,
     getTopLayerAt,
-  } = useCanvas();
+  } = useCollaborativeCanvas({ roomId: 'dalang-room', mode: 'local' });
 
   // No default canvas creation - let users start with empty state
 
@@ -65,6 +69,7 @@ export default function DalangPage() {
 
   const { uploadImage, isUploading, uploadError } = useImageUpload({
     onImageAdded: handleImageAdded,
+    mode,
   });
 
   // Sync selectedLayer with the updated layer from canvas state
@@ -85,6 +90,18 @@ export default function DalangPage() {
       }
     }
   }, [activeCanvasId, removeLayerFromCanvas, selectedLayer, setSelectedLayer]);
+
+  const handleMoveLayerUp = useCallback((layerId: string) => {
+    if (activeCanvasId) {
+      moveLayerUp(activeCanvasId, layerId);
+    }
+  }, [activeCanvasId, moveLayerUp]);
+
+  const handleMoveLayerDown = useCallback((layerId: string) => {
+    if (activeCanvasId) {
+      moveLayerDown(activeCanvasId, layerId);
+    }
+  }, [activeCanvasId, moveLayerDown]);
 
   const handleCreateCanvasFromImage = useCallback(async (file: File) => {
     try {
@@ -172,8 +189,19 @@ export default function DalangPage() {
                  Resizing layer... {isShiftPressed ? '(Aspect ratio locked)' : '(Hold Shift to maintain aspect ratio)'}
                </div>
              )}
-            <div className="text-sm text-gray-500">
-              Mode: {mouseMode === 'move' ? 'Move' : 'Pan'}
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-gray-500">
+                Mode: {mouseMode === 'move' ? 'Move' : 'Pan'}
+              </div>
+              <div className="flex items-center gap-3">
+                <div className={`text-sm flex items-center gap-1 ${isConnected ? 'text-green-600' : 'text-orange-600'}`}>
+                  <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-orange-500'}`}></div>
+                  {isConnected ? 'Connected' : 'Offline'}
+                </div>
+                <div className="text-sm text-blue-600 font-medium">
+                  {mode === 'local' ? '📁 Local' : '☁️ Online'}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -228,6 +256,8 @@ export default function DalangPage() {
               selectedLayer={selectedLayer}
               onLayerDelete={handleLayerDelete}
               onLayerSelect={setSelectedLayer}
+              onMoveLayerUp={handleMoveLayerUp}
+              onMoveLayerDown={handleMoveLayerDown}
             />
           </div>
         </div>

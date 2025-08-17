@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef } from 'react';
-import { useCanvas } from '@/hooks/useCanvas';
+import { useCollaborativeCanvas } from '@/hooks/useCollaborativeCanvas';
 import { CanvasRenderer } from '@/components/CanvasRenderer';
 import { CanvasPanel } from '@/components/CanvasPanel';
 
@@ -14,8 +14,10 @@ export default function ViewPage() {
     activeCanvas,
     activeCanvasId,
     activeCanvasLayers,
+    isConnected,
+    mode,
     setActiveCanvas,
-  } = useCanvas();
+  } = useCollaborativeCanvas({ roomId: 'dalang-room', mode: 'local' });
 
   // No default canvas creation - let users start with empty state
 
@@ -29,6 +31,10 @@ export default function ViewPage() {
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Wayang Viewer</h2>
             <p className="text-gray-600 mb-6">No canvases available to view</p>
             <p className="text-sm text-gray-500">Ask a Dalang to create some canvases first</p>
+            <div className={`mt-4 text-sm flex items-center justify-center gap-2 ${isConnected ? 'text-green-600' : 'text-orange-600'}`}>
+              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-orange-500'}`}></div>
+              {isConnected ? 'Connected to Dalang' : 'Waiting for connection...'}
+            </div>
           </div>
         </div>
 
@@ -53,8 +59,19 @@ export default function ViewPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-gray-800">Wayang Viewer</h1>
           <div className="flex items-center gap-4">
-            <div className="text-sm text-gray-500">
-              Viewing Mode - Read Only
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-gray-500">
+                Viewing Mode - Read Only
+              </div>
+              <div className="flex items-center gap-3">
+                <div className={`text-sm flex items-center gap-1 ${isConnected ? 'text-green-600' : 'text-orange-600'}`}>
+                  <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-orange-500'}`}></div>
+                  {isConnected ? 'Live' : 'Offline'}
+                </div>
+                <div className="text-sm text-blue-600 font-medium">
+                  {mode === 'local' ? '📁 Local' : '☁️ Online'}
+                </div>
+              </div>
             </div>
             <div className="text-sm text-gray-500">
               Canvas: {activeCanvas.width}×{activeCanvas.height}
