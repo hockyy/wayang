@@ -10,11 +10,16 @@
     "ws-server": "npx y-websocket",
     "ws-server-persist": "HOST=localhost PORT=1234 YPERSISTENCE=./yjs-db npx y-websocket",
     "dev-full": "concurrently \"npm run ws-server-persist\" \"npm run dev\"",
-    "collab": "node start-collaboration.mjs"
+    "collab": "node start-collaboration.mjs",
+    "image-server": "node image-server.js",
+    "dev-with-images": "concurrently \"npm run image-server\" \"npm run dev\""
   },
   "dependencies": {
     "better-sqlite3": "^12.2.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
     "gifuct-js": "^2.1.2",
+    "multer": "^1.4.5-lts.1",
     "next": "15.4.6",
     "react": "19.1.0",
     "react-dom": "19.1.0",

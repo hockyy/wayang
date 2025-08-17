@@ -64,8 +64,8 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
   const animationFrameRef = useRef<number | null>(null);
   
   // Function to get or create cached image
-  const getCachedImage = useCallback((srcPath: string): Promise<HTMLImageElement> => {
-    return new Promise((resolve, reject) => {
+  const getCachedImage = useCallback(async (srcPath: string): Promise<HTMLImageElement> => {
+    return new Promise(async (resolve, reject) => {
       // Check if image is already cached
       const cachedImage = imageCache.current.get(srcPath);
       if (cachedImage && cachedImage.complete) {
@@ -82,6 +82,8 @@ export const CanvasRenderer: React.FC<CanvasRendererProps> = ({
       img.onerror = () => {
         reject(new Error(`Failed to load image: ${srcPath}`));
       };
+      
+      // Direct URL loading (works for both server URLs and data URLs)
       img.src = srcPath;
     });
   }, []);

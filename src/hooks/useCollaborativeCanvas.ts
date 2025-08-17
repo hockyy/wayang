@@ -52,6 +52,8 @@ function layerToYjsData(layer: Layer) {
     oriHeight: layer.oriHeight,
   };
 
+  console.log('layerToYjsData', data);
+
   // For ImageLayer, store only the src path (no blob URLs)
   if (layer instanceof ImageLayer) {
     return {
