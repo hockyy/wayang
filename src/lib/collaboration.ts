@@ -31,15 +31,20 @@ export class CollaborationProvider {
     if (this.isReady) return; // Already connected
     
     try {
+      console.log(`🔄 Initializing collaboration for room: ${this.roomId}`);
+      console.log(`🌐 WebSocket enabled: ${this.enableWebSocket}, URL: ${this.websocketUrl}`);
+      
       // Set up IndexedDB persistence for offline storage
+      console.log('📦 Setting up IndexedDB persistence...');
       this.indexeddbProvider = new IndexeddbPersistence(this.roomId, this.doc);
       
       // Wait for IndexedDB to load cached data
       await this.indexeddbProvider.whenSynced;
-      console.log('IndexedDB data loaded');
+      console.log('✅ IndexedDB data loaded and synced');
 
       // Set up WebSocket if enabled
       if (this.enableWebSocket) {
+        console.log(`🔌 Connecting to WebSocket at ${this.websocketUrl}...`);
         this.websocketProvider = new WebsocketProvider(
           this.websocketUrl,
           this.roomId,
@@ -50,19 +55,76 @@ export class CollaborationProvider {
           }
         );
 
-        // Simple connection setup - no complex timeout handling
+        // Enhanced connection status logging
         this.websocketProvider.on('status', (event: { status: string }) => {
+          console.log(`🔗 WebSocket status changed: ${event.status}`);
           if (event.status === 'connected') {
-            console.log('WebSocket connected');
+            console.log('✅ WebSocket connected successfully');
+            console.log(`📊 Connection details:`, {
+              wsConnected: this.websocketProvider?.wsconnected,
+              wsConnecting: this.websocketProvider?.wsconnecting,
+              synced: this.websocketProvider?.synced,
+              bcConnected: this.websocketProvider?.bcconnected,
+            });
           } else if (event.status === 'disconnected') {
-            console.log('WebSocket disconnected, working offline');
+            console.log('❌ WebSocket disconnected, working offline');
+          } else if (event.status === 'connecting') {
+            console.log('🔄 WebSocket connecting...');
           }
         });
+
+        this.websocketProvider.on('sync', (isSynced: boolean) => {
+          console.log(`🔄 Sync status changed: ${isSynced ? 'synced' : 'not synced'}`);
+        });
+
+        this.websocketProvider.on('connection-close', (event: CloseEvent | null) => {
+          if (event) {
+            console.log(`🔌 WebSocket connection closed:`, {
+              code: event.code,
+              reason: event.reason,
+              wasClean: event.wasClean,
+            });
+          } else {
+            console.log('🔌 WebSocket connection closed (no event details)');
+          }
+        });
+
+        this.websocketProvider.on('connection-error', (event: Event) => {
+          console.error('❌ WebSocket connection error:', event);
+        });
+
+        // Log awareness information
+        if (this.websocketProvider.awareness) {
+          this.websocketProvider.awareness.on('change', () => {
+            const states = Array.from(this.websocketProvider!.awareness.getStates().values());
+            console.log('👥 Awareness states changed:', states.length, 'clients connected');
+          });
+        }
+
+        // Periodic connection status logging
+        const statusLogger = setInterval(() => {
+          if (this.websocketProvider) {
+            console.log('📊 Periodic status check:', {
+              wsConnected: this.websocketProvider.wsconnected,
+              wsConnecting: this.websocketProvider.wsconnecting,
+              synced: this.websocketProvider.synced,
+              bcConnected: this.websocketProvider.bcconnected,
+              shouldConnect: this.websocketProvider.shouldConnect,
+            });
+          } else {
+            clearInterval(statusLogger);
+          }
+        }, 10000); // Every 10 seconds
       }
 
       this.isReady = true;
+      console.log('✅ Collaboration provider initialized successfully');
     } catch (error) {
-      console.warn('Collaboration setup failed, working offline:', error);
+      console.error('❌ Collaboration setup failed, working offline:', error);
+      console.error('Error details:', {
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       this.isReady = true; // Still mark as ready for offline use
     }
   }

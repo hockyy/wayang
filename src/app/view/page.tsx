@@ -17,7 +17,14 @@ export default function ViewPage() {
     isConnected,
     mode,
     setActiveCanvas,
-  } = useCollaborativeCanvas({ roomId: 'dalang-room', mode: 'local' });
+  } = useCollaborativeCanvas({ roomId: 'dalang-room', mode: 'online' });
+
+  // Auto-select the first canvas when available
+  React.useEffect(() => {
+    if (!activeCanvasId && canvases.length > 0) {
+      setActiveCanvas(canvases[0].id);
+    }
+  }, [activeCanvasId, canvases, setActiveCanvas]);
 
   // No default canvas creation - let users start with empty state
 

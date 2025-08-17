@@ -139,7 +139,7 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
     const provider = getCollaborationProvider(roomId, {
       enableWebSocket: mode === 'online'
     });
-    const yCanvases = provider.getSharedArray('canvases') as Y.Array<Y.Map<unknown>>;
+    const yCanvases = provider.getSharedArray('canvases2') as Y.Array<Y.Map<unknown>>;
     
     // Cache initial snapshot to provide stable server snapshot
     const initialSnapshot = yCanvases.toJSON();

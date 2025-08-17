@@ -34,7 +34,7 @@ export default function DalangPage() {
     moveLayerUp,
     moveLayerDown,
     getTopLayerAt,
-  } = useCollaborativeCanvas({ roomId: 'dalang-room'});
+  } = useCollaborativeCanvas({ roomId: 'dalang-room', mode: 'online' });
 
   // No default canvas creation - let users start with empty state
 
