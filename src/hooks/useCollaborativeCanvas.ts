@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { Canvas, Layer, Point, BackgroundConfig, ImageLayer } from '@/types/core';
 import { getCollaborationProvider } from '@/lib/collaboration';
-import { useY } from 'react-yjs';
+import { useYDeepArray } from './useYHooks';
 import * as Y from 'yjs';
 
 export interface UseCollaborativeCanvasProps {
@@ -135,15 +135,21 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
   const [isConnected, setIsConnected] = useState(false);
   
   // Initialize Y.Doc and shared data structures
-  const [yCanvases] = useState(() => {
+  const [collaborationState] = useState(() => {
     const provider = getCollaborationProvider(roomId, {
       enableWebSocket: mode === 'online'
     });
-    return provider.getSharedArray('canvases') as Y.Array<Y.Map<unknown>>;
+    const yCanvases = provider.getSharedArray('canvases') as Y.Array<Y.Map<unknown>>;
+    
+    // Cache initial snapshot to provide stable server snapshot
+    const initialSnapshot = yCanvases.toJSON();
+    
+    return { provider, yCanvases, initialSnapshot };
   });
 
-  // Use react-yjs to automatically trigger re-renders when Yjs data changes
-  const canvasesData = useY(yCanvases);
+  // Use custom Y.js hooks to automatically trigger re-renders when Yjs data changes
+  // This will observe deep changes in canvases and their nested layers
+  const canvasesData = useYDeepArray(collaborationState.yCanvases);
 
   // Initialize collaboration provider
   useEffect(() => {
@@ -177,16 +183,9 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
 
   // Convert Yjs data to Canvas objects
   const canvases = useMemo(() => {
-    // Trigger re-render when canvasesData changes, but use Y.Array for actual data
-    if (canvasesData.length === 0) return [];
-    
-    const result: Canvas[] = [];
-    for (let i = 0; i < yCanvases.length; i++) {
-      const yCanvas = yCanvases.get(i);
-      result.push(yMapToCanvas(yCanvas));
-    }
-    return result;
-  }, [canvasesData, yCanvases]);
+    // canvasesData now contains the actual Y.Map objects from useYArray
+    return canvasesData.map(yCanvas => yMapToCanvas(yCanvas));
+  }, [canvasesData]);
 
   const activeCanvas = useMemo(() => {
     return canvases.find(canvas => canvas.id === activeCanvasId) || null;
@@ -199,7 +198,7 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
   const createCanvas = useCallback((width: number, height: number, bg: BackgroundConfig): Canvas => {
     const newCanvas = new Canvas(width, height, bg);
     const yCanvas = canvasToYMap(newCanvas);
-    yCanvases.push([yCanvas]);
+    collaborationState.yCanvases.push([yCanvas]);
     
     // Set as active if it's the first canvas
     if (!activeCanvasId) {
@@ -207,7 +206,7 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
     }
     
     return newCanvas;
-  }, [activeCanvasId, yCanvases]);
+  }, [activeCanvasId, collaborationState.yCanvases]);
 
   const createCanvasFromImage = useCallback(async (file: File): Promise<Canvas> => {
     return new Promise((resolve, reject) => {
@@ -231,7 +230,7 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
 
           const newCanvas = new Canvas(img.naturalWidth, img.naturalHeight, bg);
           const yCanvas = canvasToYMap(newCanvas);
-          yCanvases.push([yCanvas]);
+          collaborationState.yCanvases.push([yCanvas]);
           
           if (!activeCanvasId) {
             setActiveCanvasId(newCanvas.id);
@@ -251,14 +250,14 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
 
       img.src = objectUrl;
     });
-  }, [activeCanvasId, yCanvases]);
+  }, [activeCanvasId, collaborationState.yCanvases]);
 
   const deleteCanvas = useCallback((canvasId: string) => {
     // Find and remove the canvas
-    for (let i = 0; i < yCanvases.length; i++) {
-      const yCanvas = yCanvases.get(i);
+    for (let i = 0; i < collaborationState.yCanvases.length; i++) {
+      const yCanvas = collaborationState.yCanvases.get(i);
       if (yCanvas.get('id') === canvasId) {
-        yCanvases.delete(i, 1);
+        collaborationState.yCanvases.delete(i, 1);
         break;
       }
     }
@@ -272,37 +271,37 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
         setActiveCanvasId(null);
       }
     }
-  }, [activeCanvasId, canvases, yCanvases]);
+  }, [activeCanvasId, canvases, collaborationState.yCanvases]);
 
   const setActiveCanvas = useCallback((canvasId: string) => {
     setActiveCanvasId(canvasId);
   }, []);
 
   const findCanvasIndex = useCallback((canvasId: string): number => {
-    for (let i = 0; i < yCanvases.length; i++) {
-      const yCanvas = yCanvases.get(i);
+    for (let i = 0; i < collaborationState.yCanvases.length; i++) {
+      const yCanvas = collaborationState.yCanvases.get(i);
       if (yCanvas.get('id') === canvasId) {
         return i;
       }
     }
     return -1;
-  }, [yCanvases]);
+  }, [collaborationState.yCanvases]);
 
   const addLayerToCanvas = useCallback((canvasId: string, layer: Layer) => {
     const canvasIndex = findCanvasIndex(canvasId);
     if (canvasIndex === -1) return;
 
-    const yCanvas = yCanvases.get(canvasIndex);
+    const yCanvas = collaborationState.yCanvases.get(canvasIndex);
     const yLayers = yCanvas.get('layers') as Y.Array<Y.Map<unknown>>;
     const yLayer = layerToYMap(layer);
     yLayers.push([yLayer]);
-  }, [findCanvasIndex, yCanvases]);
+  }, [findCanvasIndex, collaborationState.yCanvases]);
 
   const removeLayerFromCanvas = useCallback((canvasId: string, layerId: string) => {
     const canvasIndex = findCanvasIndex(canvasId);
     if (canvasIndex === -1) return;
 
-    const yCanvas = yCanvases.get(canvasIndex);
+    const yCanvas = collaborationState.yCanvases.get(canvasIndex);
     const yLayers = yCanvas.get('layers') as Y.Array<Y.Map<unknown>>;
     
     for (let i = 0; i < yLayers.length; i++) {
@@ -312,13 +311,13 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
         break;
       }
     }
-  }, [findCanvasIndex, yCanvases]);
+  }, [findCanvasIndex, collaborationState.yCanvases]);
 
   const updateLayer = useCallback((canvasId: string, layerId: string, updates: Partial<Layer>) => {
     const canvasIndex = findCanvasIndex(canvasId);
     if (canvasIndex === -1) return;
 
-    const yCanvas = yCanvases.get(canvasIndex);
+    const yCanvas = collaborationState.yCanvases.get(canvasIndex);
     const yLayers = yCanvas.get('layers') as Y.Array<Y.Map<unknown>>;
     
     for (let i = 0; i < yLayers.length; i++) {
@@ -340,7 +339,7 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
         break;
       }
     }
-  }, [findCanvasIndex, yCanvases]);
+  }, [findCanvasIndex, collaborationState.yCanvases]);
 
   const moveLayer = useCallback((canvasId: string, layerId: string, offsetX: number, offsetY: number) => {
     if (!activeCanvas || activeCanvas.id !== canvasId) return;
@@ -397,7 +396,7 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
     const canvasIndex = findCanvasIndex(canvasId);
     if (canvasIndex === -1) return;
 
-    const yCanvas = yCanvases.get(canvasIndex);
+    const yCanvas = collaborationState.yCanvases.get(canvasIndex);
     const yLayers = yCanvas.get('layers') as Y.Array<Y.Map<unknown>>;
     
     let layerIndex = -1;
@@ -413,13 +412,13 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
       yLayers.delete(layerIndex, 1);
       yLayers.insert(layerIndex + 1, [yLayer]);
     }
-  }, [findCanvasIndex, yCanvases]);
+  }, [findCanvasIndex, collaborationState.yCanvases]);
 
   const moveLayerDown = useCallback((canvasId: string, layerId: string) => {
     const canvasIndex = findCanvasIndex(canvasId);
     if (canvasIndex === -1) return;
 
-    const yCanvas = yCanvases.get(canvasIndex);
+    const yCanvas = collaborationState.yCanvases.get(canvasIndex);
     const yLayers = yCanvas.get('layers') as Y.Array<Y.Map<unknown>>;
     
     let layerIndex = -1;
@@ -435,7 +434,7 @@ export const useCollaborativeCanvas = ({ roomId, mode = 'local' }: UseCollaborat
       yLayers.delete(layerIndex, 1);
       yLayers.insert(layerIndex - 1, [yLayer]);
     }
-  }, [findCanvasIndex, yCanvases]);
+  }, [findCanvasIndex, collaborationState.yCanvases]);
 
   const getTopLayerAt = useCallback((canvasId: string, point: Point): Layer | null => {
     if (!activeCanvas || activeCanvas.id !== canvasId) return null;
