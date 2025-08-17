@@ -1,128 +1,9 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Point, MouseMode, Layer } from '@/types/core';
-
-// Utility functions for handle calculations
-const getOppositeHandle = (handleIndex: number): number => {
-  return (handleIndex + 2) % 4;
-};
-
-const getHandlePositions = (bottomLeft: Point, topRight: Point) => {
-  const x = Math.min(bottomLeft.x, topRight.x);
-  const y = Math.min(bottomLeft.y, topRight.y);
-  const width = Math.abs(topRight.x - bottomLeft.x);
-  const height = Math.abs(topRight.y - bottomLeft.y);
-  
-  return [
-    new Point(x, y),                    // 0: topLeft
-    new Point(x + width, y),            // 1: topRight  
-    new Point(x + width, y + height),   // 2: bottomRight
-    new Point(x, y + height),           // 3: bottomLeft
-  ];
-};
-
-const calculateNewBounds = (mousePos: Point, pivotPoint: Point, activeHandle: number, maintainAspectRatio: boolean = false, originalAspectRatio?: number): { bottomLeft: Point; topRight: Point } => {
-  // Calculate bounds ensuring bottomLeft is actually bottom-left and topRight is actually top-right
-  let x1: number, y1: number, x2: number, y2: number;
-  
-  if (maintainAspectRatio && originalAspectRatio) {
-    // Calculate constrained mouse position to maintain aspect ratio
-    const deltaX = mousePos.x - pivotPoint.x;
-    const deltaY = mousePos.y - pivotPoint.y;
-    
-    // Calculate the size based on the larger dimension change
-    const currentWidth = Math.abs(deltaX);
-    const currentHeight = Math.abs(deltaY);
-    
-    // Determine which dimension should drive the resize
-    let constrainedWidth: number, constrainedHeight: number;
-    
-    if (currentWidth / currentHeight > originalAspectRatio) {
-      // Width is driving, constrain height
-      constrainedWidth = currentWidth;
-      constrainedHeight = currentWidth / originalAspectRatio;
-    } else {
-      // Height is driving, constrain width
-      constrainedHeight = currentHeight;
-      constrainedWidth = currentHeight * originalAspectRatio;
-    }
-    
-    // Apply the constrained dimensions with proper signs
-    const constrainedDeltaX = constrainedWidth * Math.sign(deltaX);
-    const constrainedDeltaY = constrainedHeight * Math.sign(deltaY);
-    
-    // Calculate new position based on constrained deltas
-    const constrainedMouseX = pivotPoint.x + constrainedDeltaX;
-    const constrainedMouseY = pivotPoint.y + constrainedDeltaY;
-    
-    // Use constrained position for calculations
-    switch (activeHandle) {
-      case 0: // topLeft - pivot is bottomRight (2)
-        x1 = constrainedMouseX; y1 = constrainedMouseY; x2 = pivotPoint.x; y2 = pivotPoint.y;
-        break;
-      case 1: // topRight - pivot is bottomLeft (3)
-        x1 = pivotPoint.x; y1 = constrainedMouseY; x2 = constrainedMouseX; y2 = pivotPoint.y;
-        break;
-      case 2: // bottomRight - pivot is topLeft (0)
-        x1 = pivotPoint.x; y1 = pivotPoint.y; x2 = constrainedMouseX; y2 = constrainedMouseY;
-        break;
-      case 3: // bottomLeft - pivot is topRight (1)
-        x1 = constrainedMouseX; y1 = pivotPoint.y; x2 = pivotPoint.x; y2 = constrainedMouseY;
-        break;
-      default:
-        x1 = Math.min(constrainedMouseX, pivotPoint.x);
-        y1 = Math.min(constrainedMouseY, pivotPoint.y);
-        x2 = Math.max(constrainedMouseX, pivotPoint.x);
-        y2 = Math.max(constrainedMouseY, pivotPoint.y);
-    }
-  } else {
-    // Free resize (original logic)
-    switch (activeHandle) {
-      case 0: // topLeft - pivot is bottomRight (2)
-        x1 = mousePos.x;  // new left
-        y1 = mousePos.y;  // new top  
-        x2 = pivotPoint.x; // pivot right
-        y2 = pivotPoint.y; // pivot bottom
-        break;
-      case 1: // topRight - pivot is bottomLeft (3)
-        x1 = pivotPoint.x; // pivot left
-        y1 = mousePos.y;   // new top
-        x2 = mousePos.x;   // new right  
-        y2 = pivotPoint.y; // pivot bottom
-        break;
-      case 2: // bottomRight - pivot is topLeft (0)
-        x1 = pivotPoint.x; // pivot left
-        y1 = pivotPoint.y; // pivot top
-        x2 = mousePos.x;   // new right
-        y2 = mousePos.y;   // new bottom
-        break;
-      case 3: // bottomLeft - pivot is topRight (1)
-        x1 = mousePos.x;   // new left
-        y1 = pivotPoint.y; // pivot top
-        x2 = pivotPoint.x; // pivot right
-        y2 = mousePos.y;   // new bottom
-        break;
-      default:
-        // Fallback to min/max approach
-        const minX = Math.min(mousePos.x, pivotPoint.x);
-        const maxX = Math.max(mousePos.x, pivotPoint.x);
-        const minY = Math.min(mousePos.y, pivotPoint.y);
-        const maxY = Math.max(mousePos.y, pivotPoint.y);
-        x1 = minX; y1 = minY; x2 = maxX; y2 = maxY;
-    }
-  }
-  
-  // Ensure we have proper min/max values and create bottomLeft/topRight correctly
-  const minX = Math.min(x1, x2);
-  const maxX = Math.max(x1, x2);
-  const minY = Math.min(y1, y2);
-  const maxY = Math.max(y1, y2);
-  
-  // bottomLeft = bottom-left corner, topRight = top-right corner
-  const newBottomLeft = new Point(minX, maxY);
-  const newTopRight = new Point(maxX, minY);
-  
-  return { bottomLeft: newBottomLeft, topRight: newTopRight };
-};
+import { useCanvasTransform } from './useCanvasTransform';
+import { useKeyboardState } from './useKeyboardState';
+import { useLayerDragging } from './useLayerDragging';
+import { useLayerResizing } from './useLayerResizing';
 
 export interface UseMouseProps {
   canvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -157,94 +38,21 @@ export const useMouse = ({
 }: UseMouseProps): UseMouseReturn => {
   const [mouseMode, setMouseMode] = useState<MouseMode>(mode);
   const [selectedLayer, setSelectedLayer] = useState<Layer | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
   const [mousePosition, setMousePosition] = useState<Point | null>(null);
-  const [activeHandle, setActiveHandle] = useState<number | null>(null);
-  const [isShiftPressed, setIsShiftPressed] = useState(false);
 
-  const dragStartPos = useRef<Point | null>(null);
-  const initialLayerBounds = useRef<{ bottomLeft: Point; topRight: Point } | null>(null);
-  const initialDragLayerBounds = useRef<{ bottomLeft: Point; topRight: Point } | null>(null);
-  const finalLayerBounds = useRef<{ bottomLeft: Point; topRight: Point } | null>(null);
-  const wasDraggingLayer = useRef<string | null>(null);
-  const wasResizingLayer = useRef<string | null>(null);
-  const wasResizingWithShift = useRef<boolean>(false);
-
-  // Track canvas dimensions and position for efficient coordinate transformation
-  const [canvasTransform, setCanvasTransform] = useState<{
-    rect: DOMRect | null;
-    scaleX: number;
-    scaleY: number;
-    isValid: boolean;
-  }>({
-    rect: null,
-    scaleX: 1,
-    scaleY: 1,
-    isValid: false
+  // Use the specialized hooks
+  const { getMousePositionFromEvent } = useCanvasTransform(canvasRef);
+  const { isShiftPressed, setIsShiftPressed } = useKeyboardState();
+  
+  const dragging = useLayerDragging({
+    onLayerMove,
+    onLayerMoveEnd,
   });
-
-  // Update canvas transform when canvas changes or on resize
-  const updateCanvasTransform = useCallback(() => {
-    if (!canvasRef.current) {
-      setCanvasTransform({
-        rect: null,
-        scaleX: 1,
-        scaleY: 1,
-        isValid: false
-      });
-      return;
-    }
-
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    
-    setCanvasTransform({
-      rect,
-      scaleX: canvas.width / rect.width,
-      scaleY: canvas.height / rect.height,
-      isValid: true
-    });
-  }, [canvasRef]);
-
-  // Update transform when canvas changes or window resizes
-  useEffect(() => {
-    updateCanvasTransform();
-    
-    const handleResize = () => updateCanvasTransform();
-    window.addEventListener('resize', handleResize);
-    
-    return () => {
-      window.removeEventListener('resize', handleResize);
-    };
-  }, [updateCanvasTransform]);
-
-  const getMousePositionFromEvent = useCallback((event: MouseEvent): Point | null => {
-    // Fallback calculation if canvas transform isn't ready
-    if (!canvasTransform.isValid || !canvasTransform.rect) {
-      if (!canvasRef.current) return null;
-      
-      // Calculate using getBoundingClientRect as fallback
-      const rect = canvasRef.current.getBoundingClientRect();
-      const mouseX = event.clientX - rect.left;
-      const mouseY = event.clientY - rect.top;
-      
-      // Convert from display coordinates to canvas coordinates
-      const scaleX = canvasRef.current.width / rect.width;
-      const scaleY = canvasRef.current.height / rect.height;
-      
-      return new Point(mouseX * scaleX, mouseY * scaleY);
-    }
-
-    // Use cached transform for better performance
-    const mouseX = event.clientX - canvasTransform.rect.left;
-    const mouseY = event.clientY - canvasTransform.rect.top;
-
-    // Convert from display coordinates to canvas coordinates
-    const canvasX = mouseX * canvasTransform.scaleX;
-    const canvasY = mouseY * canvasTransform.scaleY;
-    return new Point(canvasX, canvasY);
-  }, [canvasTransform, canvasRef]);
+  
+  const resizing = useLayerResizing({
+    onLayerResize,
+    onLayerResizeEnd,
+  });
 
   const handleMouseDown = useCallback((event: MouseEvent) => {
     if (!canvasRef.current) return;
@@ -252,55 +60,36 @@ export const useMouse = ({
     const mousePos = getMousePositionFromEvent(event);
     if (!mousePos) return;
     
-    // Prevent default browser behavior (text selection, image dragging, etc.)
+    // Prevent default browser behavior
     event.preventDefault();
     setMousePosition(mousePos);
     setIsShiftPressed(event.shiftKey);
 
     if (mouseMode === 'move' && getTopLayerAt) {
-      // First, check if clicking on a handle of the currently selected layer
+      // Check if clicking on a handle of the currently selected layer
       if (selectedLayer) {
-        const selectedHandleIndex = selectedLayer.getHandleAt(mousePos);
+        const handleIndex = selectedLayer.getHandleAt(mousePos);
         
-        if (selectedHandleIndex !== null) {
-          // Start resizing the selected layer
-          setIsResizing(true);
-          setActiveHandle(selectedHandleIndex);
-          wasResizingLayer.current = selectedLayer.id;
-          initialLayerBounds.current = {
-            bottomLeft: selectedLayer.bottomLeft.clone(),
-            topRight: selectedLayer.topRight.clone()
-          };
-          dragStartPos.current = mousePos;
-          return; // Early return to avoid checking other layers
+        if (handleIndex !== null) {
+          // Start resizing
+          resizing.startResizing(selectedLayer, handleIndex, event.shiftKey);
+          return;
         }
       }
 
-      // If not clicking on a handle, check for layer selection/interaction
+      // Check for layer selection/interaction
       const layer = getTopLayerAt(mousePos);
 
-      if (layer) {
-        if (layer.containsPoint(mousePos)) {
-          // Start moving
-          setSelectedLayer(layer);
-          setIsDragging(true);
-          dragStartPos.current = mousePos;
-          wasDraggingLayer.current = layer.id;
-          // Store initial layer bounds for dragging
-          initialDragLayerBounds.current = {
-            bottomLeft: layer.bottomLeft.clone(),
-            topRight: layer.topRight.clone()
-          };
-        } else {
-          // Click on layer but outside its bounds (shouldn't happen with getTopLayerAt)
-          setSelectedLayer(layer);
-        }
+      if (layer && layer.containsPoint(mousePos)) {
+        // Start dragging
+        setSelectedLayer(layer);
+        dragging.startDragging(layer, mousePos);
       } else {
-        // No layer found, deselect
-        setSelectedLayer(null);
+        // No layer found or clicked outside bounds, deselect
+        setSelectedLayer(layer);
       }
     }
-  }, [getTopLayerAt, getMousePositionFromEvent, selectedLayer, canvasRef, mouseMode]);
+  }, [getTopLayerAt, getMousePositionFromEvent, selectedLayer, canvasRef, mouseMode, dragging, resizing, setIsShiftPressed]);
 
   const handleMouseMove = useCallback((event: MouseEvent) => {
     if (!canvasRef.current) return;
@@ -308,116 +97,32 @@ export const useMouse = ({
     const mousePos = getMousePositionFromEvent(event);
     if (!mousePos) return;
     
-    // Prevent default browser behavior during dragging/resizing
-    if (isDragging || isResizing) {
+    // Prevent default browser behavior during interactions
+    if (dragging.isDragging || resizing.isResizing) {
       event.preventDefault();
     }
     
     setMousePosition(mousePos);
     setIsShiftPressed(event.shiftKey);
 
-    if (isResizing && selectedLayer && activeHandle !== null && initialLayerBounds.current) {
-
-      // Get opposite handle and handle positions using utility functions
-      const pivotHandleIndex = getOppositeHandle(activeHandle);
-      const initialHandlePositions = getHandlePositions(
-        initialLayerBounds.current.bottomLeft, 
-        initialLayerBounds.current.topRight
-      );
-
-      // Pivot point is the opposite corner from initial bounds
-      const pivotPoint = initialHandlePositions[pivotHandleIndex];
-
-      // Calculate new bounds based on the specific handle being dragged
-      const originalAspectRatio = isShiftPressed ? selectedLayer.getAspectRatio().getFloat() : undefined;
-      const { bottomLeft, topRight } = calculateNewBounds(mousePos, pivotPoint, activeHandle, isShiftPressed, originalAspectRatio);
-
-      // Store final bounds for end callback
-      finalLayerBounds.current = { bottomLeft, topRight };
-      wasResizingWithShift.current = isShiftPressed;
-      
-      // Update layer positions through callback if provided, otherwise directly mutate
-      if (onLayerResize) {
-        onLayerResize(selectedLayer.id, bottomLeft, topRight, isShiftPressed);
-      } else {
-        // Fallback to direct coordinate mutation for backward compatibility
-        selectedLayer.bottomLeft.x = bottomLeft.x;
-        selectedLayer.bottomLeft.y = bottomLeft.y;
-        selectedLayer.topRight.x = topRight.x;
-        selectedLayer.topRight.y = topRight.y;
-      }
-    } else if (isDragging && selectedLayer && mouseMode === 'move') {
-      if (dragStartPos.current && initialDragLayerBounds.current) {
-        // Calculate offset from drag start
-        const offsetX = mousePos.x - dragStartPos.current.x;
-        const offsetY = mousePos.y - dragStartPos.current.y;
-        
-        // Calculate new absolute position based on initial bounds
-        const newBottomLeft = new Point(
-          initialDragLayerBounds.current.bottomLeft.x + offsetX,
-          initialDragLayerBounds.current.bottomLeft.y + offsetY
-        );
-        const newTopRight = new Point(
-          initialDragLayerBounds.current.topRight.x + offsetX,
-          initialDragLayerBounds.current.topRight.y + offsetY
-        );
-        
-        // Store final bounds for end callback
-        finalLayerBounds.current = { bottomLeft: newBottomLeft, topRight: newTopRight };
-        
-        // Update layer position through callback if provided, otherwise directly mutate
-        if (onLayerMove) {
-          onLayerMove(selectedLayer.id, newBottomLeft, newTopRight);
-        } else {
-          // Fallback to direct coordinate mutation for backward compatibility
-          selectedLayer.bottomLeft.x = newBottomLeft.x;
-          selectedLayer.bottomLeft.y = newBottomLeft.y;
-          selectedLayer.topRight.x = newTopRight.x;
-          selectedLayer.topRight.y = newTopRight.y;
-        }
-      }
+    // Update dragging or resizing position
+    if (resizing.isResizing) {
+      resizing.updateResizePosition(mousePos, event.shiftKey);
+    } else if (dragging.isDragging && mouseMode === 'move') {
+      dragging.updateDragPosition(mousePos);
     }
-
-  }, [isDragging, isResizing, selectedLayer, activeHandle, mouseMode, canvasRef, getMousePositionFromEvent, isShiftPressed, onLayerMove, onLayerResize]);
+  }, [dragging, resizing, mouseMode, canvasRef, getMousePositionFromEvent, setIsShiftPressed]);
 
   const handleMouseUp = useCallback((event: MouseEvent) => {
-    // Prevent default browser behavior
     event.preventDefault();
     
-    // Call end callbacks if we were dragging or resizing
-    if (wasDraggingLayer.current && finalLayerBounds.current && onLayerMoveEnd) {
-      onLayerMoveEnd(wasDraggingLayer.current, finalLayerBounds.current.bottomLeft, finalLayerBounds.current.topRight);
-    }
+    // End any active interactions
+    dragging.endDragging();
+    resizing.endResizing();
     
-    if (wasResizingLayer.current && finalLayerBounds.current && onLayerResizeEnd) {
-      onLayerResizeEnd(wasResizingLayer.current, finalLayerBounds.current.bottomLeft, finalLayerBounds.current.topRight, wasResizingWithShift.current);
-    }
-    
-    setIsDragging(false);
-    setIsResizing(false);
-    setActiveHandle(null);
-    setIsShiftPressed(false); // Reset shift state on mouse up
-    dragStartPos.current = null;
-    initialLayerBounds.current = null;
-    initialDragLayerBounds.current = null;
-    finalLayerBounds.current = null;
-    wasDraggingLayer.current = null;
-    wasResizingLayer.current = null;
-    wasResizingWithShift.current = false;
-  }, [onLayerMoveEnd, onLayerResizeEnd]);
-
-  // Handle keyboard events for shift key
-  const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    if (event.key === 'Shift') {
-      setIsShiftPressed(true);
-    }
-  }, []);
-
-  const handleKeyUp = useCallback((event: KeyboardEvent) => {
-    if (event.key === 'Shift') {
-      setIsShiftPressed(false);
-    }
-  }, []);
+    // Reset shift state on mouse up
+    setIsShiftPressed(false);
+  }, [dragging, resizing, setIsShiftPressed]);
 
   // Set up event listeners
   useEffect(() => {
@@ -427,27 +132,23 @@ export const useMouse = ({
     canvas.addEventListener('mousedown', handleMouseDown);
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('keyup', handleKeyUp);
 
     return () => {
       canvas.removeEventListener('mousedown', handleMouseDown);
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('keyup', handleKeyUp);
     };
-  }, [handleMouseDown, handleMouseMove, handleMouseUp, handleKeyDown, handleKeyUp, canvasRef]);
+  }, [handleMouseDown, handleMouseMove, handleMouseUp, canvasRef]);
 
   return {
     mouseMode,
     setMouseMode,
     selectedLayer,
     setSelectedLayer,
-    isDragging,
-    isResizing,
+    isDragging: dragging.isDragging,
+    isResizing: resizing.isResizing,
     mousePosition,
-    activeHandle,
+    activeHandle: resizing.activeHandle,
     isShiftPressed,
   };
 };
