@@ -115,7 +115,16 @@ export const CanvasPanel: React.FC<CanvasPanelProps> = ({
   }, []);
 
   const sortedCanvases = useMemo(() => {
-    return canvases.slice().sort((a, b) => a.id.localeCompare(b.id));
+    // Fallback to simple string comparison if localeCompare is not available
+    return canvases.slice().sort((a, b) => {
+      if (typeof a.id === 'string' && typeof b.id === 'string' && a.id.localeCompare) {
+        return a.id.localeCompare(b.id);
+      }
+      // fallback: compare as strings
+      if (a.id < b.id) return -1;
+      if (a.id > b.id) return 1;
+      return 0;
+    });
   }, [canvases]);
 
   return (
